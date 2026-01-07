@@ -10,6 +10,9 @@ const MOVE_THRESHOLD = 15;
 const PRESS_DURATION = 500;
 const bookCache = new Map();
 
+let globalConfig = {};
+let currentUserId = null;
+
 const formatNumber = n => n >= 1e4 ? (n / 1e4).toFixed(1) + '万' : n.toLocaleString();
 
 function createAuthHeaders(userToken) {
@@ -18,6 +21,20 @@ function createAuthHeaders(userToken) {
         headers['Authorization'] = userToken;
     }
     return headers;
+}
+
+function parseUserToken(userToken) {
+    if (!userToken) return null;
+    try {
+        const token = userToken.trim().replace(/^Bearer\s+/, '');
+        const parts = token.split('.');
+        if (parts.length < 2) return null;
+        const payload = JSON.parse(atob(parts[1]));
+        return payload.sub || null;
+    } catch (e) {
+        console.error('解析token失败:', e);
+        return null;
+    }
 }
 
 async function processBookTags(text, baseUrl, userToken) {
@@ -35,6 +52,7 @@ async function processBookTags(text, baseUrl, userToken) {
         const cardId = `book-card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         result += `<div id="${cardId}"></div>`;
+        
         setTimeout(() => loadBookCard(bookId, cardId, baseUrl, showTags, showBio, userToken), 0);
         lastIndex = regex.lastIndex;
     }
@@ -113,22 +131,40 @@ function processSpoiler(text) {
     });
 }
 
-function processFoldTags(text) {
-    return text.replace(/\[fold:([^\]]+)\]([\s\S]*?)\[\/fold\]/g, (match, title, content) => {
+async function processFoldTags(text, baseUrl, userToken) {
+    const regex = /\[fold:([^\]]+)\]([\s\S]*?)\[\/fold\]/g;
+    let lastIndex = 0;
+    let resultParts = [];
+    let match;
+
+    while (match = regex.exec(text)) {
+        resultParts.push(text.slice(lastIndex, match.index));
+
+        const title = match[1];
+        const content = match[2];
         const foldId = 'fold_' + Math.random().toString(36).substr(2, 9);
-        return `<div class="fold-container">
+        
+        const renderedContent = await renderMarkdown(content.trim(), baseUrl, userToken);
+
+        resultParts.push(`<div class="fold-container">
             <div class="fold-header" data-fold="${foldId}">${title}</div>
-            <div class="fold-content" id="${foldId}">${marked.parse(processSpoiler(content.trim()))}</div>
-        </div>`;
-    });
+            <div class="fold-content" id="${foldId}">${renderedContent}</div>
+        </div>`);
+
+        lastIndex = regex.lastIndex;
+    }
+
+    resultParts.push(text.slice(lastIndex));
+    return resultParts.join('');
 }
 
 async function renderMarkdown(text, baseUrl, userToken) {
     const processedBookTagsText = await processBookTags(text, baseUrl, userToken);
-    const processedSpoilerText = processSpoiler(processedBookTagsText);
-    const processedFoldText = processFoldTags(processedSpoilerText);
-    return marked.parse(processedFoldText);
+    const processedFoldText = await processFoldTags(processedBookTagsText, baseUrl, userToken);
+    const processedSpoilerText = processSpoiler(processedFoldText);
+    return marked.parse(processedSpoilerText);
 }
+
 
 function getRandomGradient() {
     const gradients = [
@@ -190,6 +226,21 @@ async function getComment(data, baseUrl, userToken) {
         </div>`;
 
         const contentHtml = await renderMarkdown(comment.content, baseUrl, userToken);
+        
+        const isOwnComment = currentUserId && comment.authorId === currentUserId;
+        
+        let actionsHtml = '';
+        if (isReply) {
+            actionsHtml = `<div class="reply-actions">
+                <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
+                ${isOwnComment ? `<button class="action-btn delete delete-reply-btn" data-reply-id="${comment.id}">🗑️ 删除</button>` : ''}
+            </div>`;
+        } else {
+            actionsHtml = `<div class="comment-actions">
+                <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
+                ${isOwnComment ? `<button class="action-btn delete delete-comment-btn" data-comment-id="${comment.id}">🗑️ 删除</button>` : ''}
+            </div>`;
+        }
 
         let repliesHtml = '';
         const replies = comment.replies || [];
@@ -228,6 +279,7 @@ async function getComment(data, baseUrl, userToken) {
                 </div>
                 ${badgesHtml}
                 <div class="reply-content">${contentHtml}</div>
+                ${actionsHtml}
                 ${repliesHtml}
             </div>`;
         } else {
@@ -245,6 +297,7 @@ async function getComment(data, baseUrl, userToken) {
                 </div>
                 ${badgesHtml}
                 <div class="comment-content">${contentHtml}</div>
+                ${actionsHtml}
                 ${repliesHtml}
             </div>`;
         }
@@ -284,6 +337,9 @@ async function getReview(baseUrl, bookName, chapterName, bookId, chapterId, deta
                 avatar.style.background = getRandomGradient();
             }
         });
+        
+        bindInteractiveElements(document.getElementById('commentsList'));
+        bindActionButtons();
     } catch (error) {
         console.error('加载评论失败:', error);
         document.getElementById('commentsList').innerHTML = '<div class="error">加载失败,请稍后重试</div>';
@@ -302,20 +358,365 @@ function toggleCover(coverUrl) {
     }
 }
 
-document.addEventListener('touchstart', function(e) {
+function initFabMenu() {
+    const fabMain = document.getElementById('fabMain');
+    const fabOptions = document.getElementById('fabOptions');
+    const fabJump = document.getElementById('fabJump');
+    const fabComment = document.getElementById('fabComment');
+
+    fabMain.addEventListener('click', () => {
+        fabMain.classList.toggle('active');
+        fabOptions.classList.toggle('active');
+    });
+
+    fabJump.addEventListener('click', () => {
+        if (globalConfig.detailUrl) {
+            window.location.href = globalConfig.detailUrl;
+        }
+    });
+
+    fabComment.addEventListener('click', () => {
+        openInputPanel('comment');
+    });
+}
+
+function insertAtCursor(textarea, text, offset = 0) {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const value = textarea.value;
+
+    textarea.value = value.substring(0, start) + text + value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + offset;
+    textarea.focus();
+}
+
+function initMarkdownShortcuts() {
+    const inputField = document.getElementById('inputField');
+    document.getElementById('markdownShortcuts').addEventListener('click', (e) => {
+        const btn = e.target.closest('.shortcut-btn');
+        if (!btn) return;
+
+        const syntax = btn.dataset.syntax;
+        let textToInsert = '';
+        let cursorOffset = 0;
+        const selectedText = inputField.value.substring(inputField.selectionStart, inputField.selectionEnd);
+
+        switch (syntax) {
+            case 'bold':
+                textToInsert = `**${selectedText || '粗体文本'}**`;
+                cursorOffset = selectedText ? textToInsert.length : 2;
+                break;
+            case 'italic':
+                textToInsert = `*${selectedText || '斜体文本'}*`;
+                cursorOffset = selectedText ? textToInsert.length : 1;
+                break;
+            case 'code-inline':
+                textToInsert = `\`${selectedText || '代码'}\``;
+                cursorOffset = selectedText ? textToInsert.length : 1;
+                break;
+            case 'code-block':
+                textToInsert = `\n\`\`\`\n${selectedText || '// Your code here'}\n\`\`\`\n`;
+                cursorOffset = selectedText ? textToInsert.length - 4 : 5;
+                break;
+            case 'blockquote':
+                textToInsert = `> ${selectedText || '引用内容'}`;
+                cursorOffset = selectedText ? textToInsert.length : 2;
+                break;
+            case 'list':
+                textToInsert = `- ${selectedText || '列表项'}`;
+                cursorOffset = selectedText ? textToInsert.length : 2;
+                break;
+            case 'link':
+                textToInsert = `[${selectedText || '链接文本'}](https://example.com)`;
+                cursorOffset = selectedText ? textToInsert.length : 1;
+                break;
+            case 'bookid':
+                textToInsert = `[bookid:12345|tag,bio]`;
+                cursorOffset = 9;
+                break;
+            case 'fold':
+                textToInsert = `[fold:点击展开]折叠内容[/fold]`;
+                cursorOffset = 5;
+                break;
+            case 'spoiler':
+                textToInsert = `||剧透内容||`;
+                cursorOffset = 2;
+                break;
+        }
+        insertAtCursor(inputField, textToInsert, cursorOffset);
+    });
+}
+
+let currentInputMode = null;
+let currentCommentId = null;
+let currentReplyToName = null;
+
+function openInputPanel(mode, commentId = null, authorName = null) {
+    const overlay = document.getElementById('inputOverlay');
+    const title = document.getElementById('inputTitle');
+    const subtitle = document.getElementById('inputSubtitle');
+    const field = document.getElementById('inputField');
+    const editTabBtn = document.querySelector('.input-tab-btn[data-tab="edit"]');
+    const previewTabBtn = document.querySelector('.input-tab-btn[data-tab="preview"]');
+    const editTabContent = document.querySelector('.input-tab-content[data-tab-content="edit"]');
+    const previewTabContent = document.querySelector('.input-tab-content[data-tab-content="preview"]');
+    const markdownShortcuts = document.getElementById('markdownShortcuts');
+
+    currentInputMode = mode;
+    currentCommentId = commentId;
+    currentReplyToName = authorName;
+
+    if (mode === 'comment') {
+        const isChapter = !!globalConfig.chapterId;
+        title.textContent = isChapter ? '发表章评' : '发表书评';
+        subtitle.textContent = '分享你的想法';
+    } else if (mode === 'reply') {
+        title.textContent = '回复评论';
+        subtitle.textContent = `回复给 ${authorName}`;
+    }
+
+    field.value = '';
+    overlay.classList.add('active');
+    field.focus();
+    
+    editTabBtn.classList.add('active');
+    previewTabBtn.classList.remove('active');
+    editTabContent.classList.add('active');
+    previewTabContent.classList.remove('active');
+    markdownShortcuts.classList.remove('hidden');
+    document.getElementById('inputPreview').innerHTML = '';
+}
+
+function closeInputPanel() {
+    const overlay = document.getElementById('inputOverlay');
+    overlay.classList.remove('active');
+    currentInputMode = null;
+    currentCommentId = null;
+    currentReplyToName = null;
+}
+
+async function submitInput() {
+    const field = document.getElementById('inputField');
+    const content = field.value.trim();
+
+    if (!content) {
+        alert('请输入内容');
+        return;
+    }
+
+    if (!globalConfig.userToken) {
+        alert('未登录，无法发表评论');
+        return;
+    }
+
+    const submitBtn = document.getElementById('inputSubmit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = '发送中...';
+
+    try {
+        const headers = createAuthHeaders(globalConfig.userToken);
+        headers['Content-Type'] = 'application/json';
+
+        let url, body;
+
+        if (currentInputMode === 'comment') {
+            url = `${globalConfig.baseUrl}/api/comment/create.php`;
+            body = {
+                type: globalConfig.chapterId ? 'chapter' : 'book',
+                book_id: globalConfig.bookId,
+                content: content
+            };
+            if (globalConfig.chapterId) {
+                body.chapter_id = globalConfig.chapterId;
+            }
+        } else if (currentInputMode === 'reply') {
+            url = `${globalConfig.baseUrl}/api/comment/reply.php`;
+            body = {
+                comment_id: currentCommentId,
+                content: content,
+                reply_to_name: currentReplyToName
+            };
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(body)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert('发表成功');
+            closeInputPanel();
+            await getReview(
+                globalConfig.baseUrl,
+                globalConfig.bookName,
+                globalConfig.chapterName,
+                globalConfig.bookId,
+                globalConfig.chapterId,
+                globalConfig.detailUrl,
+                globalConfig.coverUrl,
+                globalConfig.userToken
+            );
+        } else {
+            throw new Error(result.message || '发表失败');
+        }
+    } catch (error) {
+        console.error('发表失败:', error);
+        alert('发表失败: ' + error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '发送';
+    }
+}
+
+async function deleteComment(commentId) {
+    if (!confirm('确定要删除这条评论吗？')) {
+        return;
+    }
+
+    if (!globalConfig.userToken) {
+        alert('未登录，无法删除评论');
+        return;
+    }
+
+    try {
+        const headers = createAuthHeaders(globalConfig.userToken);
+        headers['Content-Type'] = 'application/json';
+
+        const response = await fetch(`${globalConfig.baseUrl}/api/comment/delete.php`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ comment_id: commentId })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert('删除成功');
+            await getReview(
+                globalConfig.baseUrl,
+                globalConfig.bookName,
+                globalConfig.chapterName,
+                globalConfig.bookId,
+                globalConfig.chapterId,
+                globalConfig.detailUrl,
+                globalConfig.coverUrl,
+                globalConfig.userToken
+            );
+        } else {
+            throw new Error(result.message || '删除失败');
+        }
+    } catch (error) {
+        console.error('删除失败:', error);
+        alert('删除失败: ' + error.message);
+    }
+}
+
+async function deleteReply(replyId) {
+    if (!confirm('确定要删除这条回复吗？')) {
+        return;
+    }
+
+    if (!globalConfig.userToken) {
+        alert('未登录，无法删除回复');
+        return;
+    }
+
+    try {
+        const headers = createAuthHeaders(globalConfig.userToken);
+        headers['Content-Type'] = 'application/json';
+
+        const response = await fetch(`${globalConfig.baseUrl}/api/comment/delete.php`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ reply_id: replyId })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert('删除成功');
+            await getReview(
+                globalConfig.baseUrl,
+                globalConfig.bookName,
+                globalConfig.chapterName,
+                globalConfig.bookId,
+                globalConfig.chapterId,
+                globalConfig.detailUrl,
+                globalConfig.coverUrl,
+                globalConfig.userToken
+            );
+        } else {
+            throw new Error(result.message || '删除失败');
+        }
+    } catch (error) {
+        console.error('删除失败:', error);
+        alert('删除失败: ' + error.message);
+    }
+}
+
+function bindActionButtons() {
+    document.querySelectorAll('.reply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const commentId = btn.dataset.commentId;
+            const authorName = btn.dataset.authorName;
+            openInputPanel('reply', commentId, authorName);
+        });
+    });
+    
+    document.querySelectorAll('.delete-comment-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const commentId = btn.dataset.commentId;
+            deleteComment(commentId);
+        });
+    });
+    
+    document.querySelectorAll('.delete-reply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const replyId = btn.dataset.replyId;
+            deleteReply(replyId);
+        });
+    });
+}
+
+function bindInteractiveElements(container) {
+    container.querySelectorAll('.spoiler').forEach(spoiler => {
+        spoiler.removeEventListener('click', revealSpoilerClick);
+        spoiler.removeEventListener('touchstart', spoilerTouchStart);
+        spoiler.removeEventListener('touchmove', spoilerTouchMove);
+        spoiler.removeEventListener('touchend', spoilerTouchEnd);
+        spoiler.addEventListener('click', revealSpoilerClick);
+        spoiler.addEventListener('touchstart', spoilerTouchStart, {passive: true});
+        spoiler.addEventListener('touchmove', spoilerTouchMove, {passive: true});
+        spoiler.addEventListener('touchend', spoilerTouchEnd, {passive: false});
+    });
+    
+    container.querySelectorAll('.fold-header').forEach(header => {
+        header.removeEventListener('click', toggleFoldClick);
+        header.removeEventListener('touchend', toggleFoldTouchEnd);
+        header.addEventListener('click', toggleFoldClick);
+        header.addEventListener('touchend', toggleFoldTouchEnd, {passive: false});
+    });
+    
+    container.querySelectorAll('.replies-toggle-btn').forEach(btn => {
+        btn.removeEventListener('click', toggleRepliesClick);
+        btn.removeEventListener('touchend', toggleRepliesTouchEnd);
+        btn.addEventListener('click', toggleRepliesClick);
+        btn.addEventListener('touchend', toggleRepliesTouchEnd, {passive: false});
+    });
+}
+
+function revealSpoilerClick(e) {
     const target = e.target;
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    hasMoved = false;
-
-    if (target.classList.contains('replies-toggle-btn') || target.closest('.replies-toggle-btn')) {
-        return;
+    if (target.dataset.spoiler && !target.classList.contains('revealed')) {
+        target.classList.add('revealed');
     }
+}
 
-    if (target.dataset.fold) {
-        return;
-    }
-
+function spoilerTouchStart(e) {
+    const target = e.target;
     if (target.dataset.spoiler && !target.classList.contains('revealed')) {
         startTime = Date.now();
         pressTimer = setTimeout(() => {
@@ -324,52 +725,27 @@ document.addEventListener('touchstart', function(e) {
             }
         }, PRESS_DURATION);
     }
-}, {passive: true});
+}
 
-document.addEventListener('touchmove', function(e) {
-    const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
-    const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
+function spoilerTouchMove(e) {
+    const target = e.target;
+    if (target.dataset.spoiler) {
+        const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
+        const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
 
-    if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
-        hasMoved = true;
-        if (pressTimer) {
-            clearTimeout(pressTimer);
-            pressTimer = null;
-        }
-
-        const target = e.target;
-        if (target.dataset.spoiler) {
+        if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
+            hasMoved = true;
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
             target.classList.remove('temp-show');
         }
     }
-}, {passive: true});
+}
 
-document.addEventListener('touchend', function(e) {
+function spoilerTouchEnd(e) {
     const target = e.target;
-
-    const toggleBtn = target.classList.contains('replies-toggle-btn') ? target : target.closest('.replies-toggle-btn');
-    if (toggleBtn && !hasMoved) {
-        const repliesContainer = document.getElementById(toggleBtn.dataset.replies);
-        if (repliesContainer) {
-            toggleBtn.classList.toggle('expanded');
-            repliesContainer.classList.toggle('expanded');
-        }
-    }
-
-    const foldHeader = target.dataset.fold ? target : target.closest('.fold-header');
-    if (foldHeader && !hasMoved) {
-        const foldContent = document.getElementById(foldHeader.dataset.fold);
-        const header = foldContent.previousElementSibling;
-
-        if (foldContent.classList.contains('expanded')) {
-            foldContent.classList.remove('expanded');
-            header.classList.remove('expanded');
-        } else {
-            foldContent.classList.add('expanded');
-            header.classList.add('expanded');
-        }
-    }
-
     if (target.dataset.spoiler && !target.classList.contains('revealed')) {
         if (pressTimer) {
             clearTimeout(pressTimer);
@@ -384,9 +760,108 @@ document.addEventListener('touchend', function(e) {
             target.classList.add('revealed');
         }
     }
-
     hasMoved = false;
-}, {passive: false});
+}
+
+function toggleFoldClick(e) {
+    const header = e.target.closest('.fold-header');
+    if (header) {
+        const foldContent = document.getElementById(header.dataset.fold);
+        if (foldContent) {
+            header.classList.toggle('expanded');
+            foldContent.classList.toggle('expanded');
+        }
+    }
+}
+
+function toggleFoldTouchEnd(e) {
+    const header = e.target.closest('.fold-header');
+    if (header && !hasMoved) {
+        e.preventDefault();
+        const foldContent = document.getElementById(header.dataset.fold);
+        if (foldContent) {
+            header.classList.toggle('expanded');
+            foldContent.classList.toggle('expanded');
+        }
+    }
+}
+
+function toggleRepliesClick(e) {
+    const toggleBtn = e.target.closest('.replies-toggle-btn');
+    if (toggleBtn) {
+        const repliesContainer = document.getElementById(toggleBtn.dataset.replies);
+        if (repliesContainer) {
+            toggleBtn.classList.toggle('expanded');
+            repliesContainer.classList.toggle('expanded');
+        }
+    }
+}
+
+function toggleRepliesTouchEnd(e) {
+    const toggleBtn = e.target.closest('.replies-toggle-btn');
+    if (toggleBtn && !hasMoved) {
+        e.preventDefault();
+        const repliesContainer = document.getElementById(toggleBtn.dataset.replies);
+        if (repliesContainer) {
+            toggleBtn.classList.toggle('expanded');
+            repliesContainer.classList.toggle('expanded');
+        }
+    }
+}
+
+
+function initInputPanel() {
+    const overlay = document.getElementById('inputOverlay');
+    const cancelBtn = document.getElementById('inputCancel');
+    const submitBtn = document.getElementById('inputSubmit');
+    const inputField = document.getElementById('inputField');
+    const previewDiv = document.getElementById('inputPreview');
+    const tabButtons = document.querySelectorAll('.input-tab-btn');
+    const tabContents = document.querySelectorAll('.input-tab-content');
+    const markdownShortcuts = document.getElementById('markdownShortcuts');
+    
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeInputPanel();
+        }
+    });
+
+    cancelBtn.addEventListener('click', closeInputPanel);
+    submitBtn.addEventListener('click', submitInput);
+    
+    tabButtons.forEach(button => {
+        button.addEventListener('click', async () => {
+            const targetTab = button.dataset.tab;
+
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+
+            button.classList.add('active');
+            document.querySelector(`.input-tab-content[data-tab-content="${targetTab}"]`).classList.add('active');
+
+            if (targetTab === 'preview') {
+                markdownShortcuts.classList.add('hidden');
+                const markdownText = inputField.value;
+                previewDiv.innerHTML = '<div class="book-loading">渲染中...</div>';
+                const renderedHtml = await renderMarkdown(markdownText, globalConfig.baseUrl, globalConfig.userToken);
+                previewDiv.innerHTML = renderedHtml;
+                
+bindInteractiveElements(previewDiv);
+            } else {
+                markdownShortcuts.classList.remove('hidden');
+            }
+        });
+    });
+    
+    initMarkdownShortcuts();
+}
+
+document.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    hasMoved = false;
+}, {passive: true});
+
 
 function initComments(config) {
     const baseUrl = config[0] || '';
@@ -397,8 +872,23 @@ function initComments(config) {
     const detailUrl = config[5] || '#';
     const coverUrl = config[6] || '';
     const userToken = config[7] || '';
-
-    document.getElementById('commentBtn').href = detailUrl;
+    
+    globalConfig = {
+        baseUrl,
+        bookName,
+        bookId,
+        chapterName,
+        chapterId,
+        detailUrl,
+        coverUrl,
+        userToken
+    };
+    
+    currentUserId = parseUserToken(userToken);
+    
+    initFabMenu();
+    
+    initInputPanel();
 
     if (baseUrl && bookId) {
         getReview(baseUrl, bookName, chapterName, bookId, chapterId, detailUrl, coverUrl, userToken);
