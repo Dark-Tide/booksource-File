@@ -138,7 +138,7 @@ async function processFoldTags(text, baseUrl, userToken) {
     let match;
 
     while (match = regex.exec(text)) {
-        resultParts.push(text.slice(lastIndex, match.index));
+        resultParts.push('\n\n' + text.slice(lastIndex, match.index));
 
         const title = match[1];
         const content = match[2];
@@ -146,15 +146,15 @@ async function processFoldTags(text, baseUrl, userToken) {
         
         const renderedContent = await renderMarkdown(content.trim(), baseUrl, userToken);
 
-        resultParts.push(`<div class="fold-container">
+        resultParts.push(`\n\n<div class="fold-container">
             <div class="fold-header" data-fold="${foldId}">${title}</div>
             <div class="fold-content" id="${foldId}">${renderedContent}</div>
-        </div>`);
+        </div>\n\n`);
 
         lastIndex = regex.lastIndex;
     }
 
-    resultParts.push(text.slice(lastIndex));
+    resultParts.push('\n\n' + text.slice(lastIndex));
     return resultParts.join('');
 }
 
