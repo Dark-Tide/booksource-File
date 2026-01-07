@@ -40,7 +40,7 @@ function parseUserToken(userToken) {
 }
 
 async function processBookTags(text, baseUrl, userToken) {
-    const regex = /\[bookid:(\d+)(?:\s*\|\s*([a-z,]+))?\]/g;
+    const regex = /$$bookid:(\d+)(?:\s*\|\s*([a-z,]+))?$$/g;
     let lastIndex = 0;
     let result = '';
     let match;
@@ -133,7 +133,7 @@ function processSpoiler(text) {
 }
 
 function processFoldTags(text) {
-    return text.replace(/\[fold:([^\]]+)\]([\s\S]*?)\[\/fold\]/g, (match, title, content) => {
+    return text.replace(/$$fold:([^$$]+)\]([\s\S]*?)$$\/fold$$/g, (match, title, content) => {
         const foldId = 'fold_' + Math.random().toString(36).substr(2, 9);
         return `<div class="fold-container">
             <div class="fold-header" data-fold="${foldId}">${title}</div>
@@ -371,11 +371,94 @@ let currentInputMode = null;
 let currentCommentId = null;
 let currentReplyToName = null;
 
+// Helper function to insert text at cursor position
+function insertAtCursor(textarea, startTag, endTag = '') {
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const value = textarea.value;
+
+    const selectedText = value.substring(start, end);
+    const newValue = value.substring(0, start) + startTag + selectedText + endTag + value.substring(end);
+
+    textarea.value = newValue;
+
+    // Adjust cursor position
+    if (selectedText.length === 0) {
+        textarea.selectionStart = textarea.selectionEnd = start + startTag.length;
+    } else {
+        textarea.selectionStart = start + startTag.length;
+        textarea.selectionEnd = end + startTag.length;
+    }
+    textarea.focus();
+    // Trigger input event manually to update preview if in preview mode
+    textarea.dispatchEvent(new Event('input'));
+}
+
+// Function to initialize markdown toolbar and preview
+function initMarkdownEditor() {
+    const inputField = document.getElementById('inputField');
+    const markdownToolbar = document.getElementById('markdownToolbar');
+    const togglePreviewBtn = document.getElementById('togglePreviewBtn');
+    const markdownPreview = document.getElementById('markdownPreview');
+    const inputPanel = document.getElementById('inputPanel'); // Added for scroll reset
+
+    if (!markdownToolbar || !inputField || !togglePreviewBtn || !markdownPreview) return;
+
+    // Add event listeners for markdown buttons
+    markdownToolbar.addEventListener('click', (e) => {
+        const btn = e.target.closest('.markdown-btn');
+        if (!btn) return;
+
+        const syntax = btn.dataset.syntax;
+        switch (syntax) {
+            case 'bold': insertAtCursor(inputField, '**', '**'); break;
+            case 'italic': insertAtCursor(inputField, '*', '*'); break;
+            case 'link': insertAtCursor(inputField, '[链接文本](', ')'); break;
+            case 'blockquote': insertAtCursor(inputField, '> '); break;
+            case 'code': insertAtCursor(inputField, '`', '`'); break;
+            case 'codeblock': insertAtCursor(inputField, '```\n', '\n```'); break;
+            case 'bookid': insertAtCursor(inputField, '[bookid:12345|tag,bio]'); break; // Example ID, user can change
+            case 'spoiler': insertAtCursor(inputField, '||', '||'); break;
+            case 'fold': insertAtCursor(inputField, '[fold:标题]', '[/fold]'); break;
+        }
+    });
+
+    // Live preview update (only if preview is visible)
+    inputField.addEventListener('input', async () => {
+        if (markdownPreview.style.display !== 'none') {
+            markdownPreview.innerHTML = await renderMarkdown(inputField.value, globalConfig.baseUrl, globalConfig.userToken);
+        }
+    });
+
+    // Toggle preview button
+    togglePreviewBtn.addEventListener('click', async () => {
+        const isPreviewMode = markdownPreview.style.display !== 'none';
+        if (!isPreviewMode) { // Switch to preview
+            inputField.style.display = 'none';
+            markdownPreview.style.display = 'block';
+            togglePreviewBtn.textContent = '编辑';
+            markdownPreview.innerHTML = await renderMarkdown(inputField.value, globalConfig.baseUrl, globalConfig.userToken);
+        } else { // Switch to edit
+            inputField.style.display = 'block';
+            markdownPreview.style.display = 'none';
+            togglePreviewBtn.textContent = '预览';
+        }
+        // Reset scroll to top of the input panel
+        if (inputPanel) {
+            inputPanel.scrollTop = 0;
+        }
+    });
+}
+
+
 function openInputPanel(mode, commentId = null, authorName = null) {
     const overlay = document.getElementById('inputOverlay');
     const title = document.getElementById('inputTitle');
     const subtitle = document.getElementById('inputSubtitle');
     const field = document.getElementById('inputField');
+    const markdownPreview = document.getElementById('markdownPreview');
+    const togglePreviewBtn = document.getElementById('togglePreviewBtn');
+    const inputPanel = document.getElementById('inputPanel'); // Added for scroll reset
 
     currentInputMode = mode;
     currentCommentId = commentId;
@@ -391,16 +474,40 @@ function openInputPanel(mode, commentId = null, authorName = null) {
     }
 
     field.value = '';
+    markdownPreview.innerHTML = ''; // 清空预览内容
+    field.style.display = 'block'; // 确保编辑框可见
+    markdownPreview.style.display = 'none'; // 隐藏预览
+    togglePreviewBtn.textContent = '预览'; // 重置按钮文本
+    if (inputPanel) { // Reset scroll to top of the input panel
+        inputPanel.scrollTop = 0;
+    }
+
+
     overlay.classList.add('active');
     field.focus();
 }
 
 function closeInputPanel() {
     const overlay = document.getElementById('inputOverlay');
+    const field = document.getElementById('inputField');
+    const markdownPreview = document.getElementById('markdownPreview');
+    const togglePreviewBtn = document.getElementById('togglePreviewBtn');
+    const inputPanel = document.getElementById('inputPanel'); // Added for scroll reset
+
+
     overlay.classList.remove('active');
     currentInputMode = null;
     currentCommentId = null;
     currentReplyToName = null;
+
+    field.value = ''; // 清空输入框内容
+    markdownPreview.innerHTML = ''; // 清空预览内容
+    field.style.display = 'block'; // 确保编辑框可见
+    markdownPreview.style.display = 'none'; // 隐藏预览
+    togglePreviewBtn.textContent = '预览'; // 重置按钮文本
+    if (inputPanel) { // Reset scroll to top of the input panel
+        inputPanel.scrollTop = 0;
+    }
 }
 
 async function submitInput() {
@@ -609,6 +716,9 @@ function initInputPanel() {
 
     cancelBtn.addEventListener('click', closeInputPanel);
     submitBtn.addEventListener('click', submitInput);
+
+    // 初始化 Markdown 编辑器功能
+    initMarkdownEditor();
 }
 
 // 触摸事件处理
