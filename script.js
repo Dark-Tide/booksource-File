@@ -10,6 +10,10 @@ const MOVE_THRESHOLD = 15;
 const PRESS_DURATION = 500;
 const bookCache = new Map();
 
+// 全局变量
+let globalConfig = {};
+let currentUserId = null;
+
 const formatNumber = n => n >= 1e4 ? (n / 1e4).toFixed(1) + '万' : n.toLocaleString();
 
 function createAuthHeaders(userToken) {
@@ -18,6 +22,21 @@ function createAuthHeaders(userToken) {
         headers['Authorization'] = userToken;
     }
     return headers;
+}
+
+// 解析用户Token获取用户ID
+function parseUserToken(userToken) {
+    if (!userToken) return null;
+    try {
+        const token = userToken.replace('Bearer ', '');
+        const parts = token.split('.');
+        if (parts.length < 2) return null;
+        const payload = JSON.parse(atob(parts[1]));
+        return payload.sub || null;
+    } catch (e) {
+        console.error('解析token失败:', e);
+        return null;
+    }
 }
 
 async function processBookTags(text, baseUrl, userToken) {
@@ -191,6 +210,23 @@ async function getComment(data, baseUrl, userToken) {
 
         const contentHtml = await renderMarkdown(comment.content, baseUrl, userToken);
 
+        // 检查是否是当前用户的评论
+        const isOwnComment = currentUserId && comment.authorId === currentUserId;
+        
+        // 生成操作按钮
+        let actionsHtml = '';
+        if (isReply) {
+            actionsHtml = `<div class="reply-actions">
+                <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
+                ${isOwnComment ? `<button class="action-btn delete delete-reply-btn" data-reply-id="${comment.id}">🗑️ 删除</button>` : ''}
+            </div>`;
+        } else {
+            actionsHtml = `<div class="comment-actions">
+                <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
+                ${isOwnComment ? `<button class="action-btn delete delete-comment-btn" data-comment-id="${comment.id}">🗑️ 删除</button>` : ''}
+            </div>`;
+        }
+
         let repliesHtml = '';
         const replies = comment.replies || [];
 
@@ -228,6 +264,7 @@ async function getComment(data, baseUrl, userToken) {
                 </div>
                 ${badgesHtml}
                 <div class="reply-content">${contentHtml}</div>
+                ${actionsHtml}
                 ${repliesHtml}
             </div>`;
         } else {
@@ -245,6 +282,7 @@ async function getComment(data, baseUrl, userToken) {
                 </div>
                 ${badgesHtml}
                 <div class="comment-content">${contentHtml}</div>
+                ${actionsHtml}
                 ${repliesHtml}
             </div>`;
         }
@@ -284,6 +322,9 @@ async function getReview(baseUrl, bookName, chapterName, bookId, chapterId, deta
                 avatar.style.background = getRandomGradient();
             }
         });
+
+        // 绑定操作按钮事件
+        bindActionButtons();
     } catch (error) {
         console.error('加载评论失败:', error);
         document.getElementById('commentsList').innerHTML = '<div class="error">加载失败,请稍后重试</div>';
@@ -302,6 +343,246 @@ function toggleCover(coverUrl) {
     }
 }
 
+// 圆形菜单相关
+function initFabMenu() {
+    const fabMain = document.getElementById('fabMain');
+    const fabOptions = document.getElementById('fabOptions');
+    const fabJump = document.getElementById('fabJump');
+    const fabComment = document.getElementById('fabComment');
+
+    fabMain.addEventListener('click', () => {
+        fabMain.classList.toggle('active');
+        fabOptions.classList.toggle('active');
+    });
+
+    fabJump.addEventListener('click', () => {
+        if (globalConfig.detailUrl) {
+            window.location.href = globalConfig.detailUrl;
+        }
+    });
+
+    fabComment.addEventListener('click', () => {
+        openInputPanel('comment');
+    });
+}
+
+// 输入面板相关
+let currentInputMode = null;
+let currentCommentId = null;
+let currentReplyToName = null;
+
+function openInputPanel(mode, commentId = null, authorName = null) {
+    const overlay = document.getElementById('inputOverlay');
+    const title = document.getElementById('inputTitle');
+    const subtitle = document.getElementById('inputSubtitle');
+    const field = document.getElementById('inputField');
+
+    currentInputMode = mode;
+    currentCommentId = commentId;
+    currentReplyToName = authorName;
+
+    if (mode === 'comment') {
+        const isChapter = !!globalConfig.chapterId;
+        title.textContent = isChapter ? '发表章评' : '发表书评';
+        subtitle.textContent = '分享你的想法';
+    } else if (mode === 'reply') {
+        title.textContent = '回复评论';
+        subtitle.textContent = `回复给 ${authorName}`;
+    }
+
+    field.value = '';
+    overlay.classList.add('active');
+    field.focus();
+}
+
+function closeInputPanel() {
+    const overlay = document.getElementById('inputOverlay');
+    overlay.classList.remove('active');
+    currentInputMode = null;
+    currentCommentId = null;
+    currentReplyToName = null;
+}
+
+async function submitInput() {
+    const field = document.getElementById('inputField');
+    const content = field.value.trim();
+
+    if (!content) {
+        alert('请输入内容');
+        return;
+    }
+
+    if (!globalConfig.userToken) {
+        alert('未登录，无法发表评论');
+        return;
+    }
+
+    const submitBtn = document.getElementById('inputSubmit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = '发送中...';
+
+    try {
+        const headers = createAuthHeaders(globalConfig.userToken);
+        headers['Content-Type'] = 'application/json';
+
+        let url, body;
+
+        if (currentInputMode === 'comment') {
+            url = `${globalConfig.baseUrl}/api/comment/create.php`;
+            body = {
+                type: globalConfig.chapterId ? 'chapter' : 'book',
+                book_id: globalConfig.bookId,
+                content: content
+            };
+            if (globalConfig.chapterId) {
+                body.chapter_id = globalConfig.chapterId;
+            }
+        } else if (currentInputMode === 'reply') {
+            url = `${globalConfig.baseUrl}/api/comment/reply.php`;
+            body = {
+                comment_id: currentCommentId,
+                content: content,
+                reply_to_name: currentReplyToName
+            };
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(body)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert('发表成功');
+            closeInputPanel();
+            // 重新加载评论
+            location.reload();
+        } else {
+            throw new Error(result.message || '发表失败');
+        }
+    } catch (error) {
+        console.error('发表失败:', error);
+        alert('发表失败: ' + error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '发送';
+    }
+}
+
+async function deleteComment(commentId) {
+    if (!confirm('确定要删除这条评论吗？')) {
+        return;
+    }
+
+    if (!globalConfig.userToken) {
+        alert('未登录，无法删除评论');
+        return;
+    }
+
+    try {
+        const headers = createAuthHeaders(globalConfig.userToken);
+        headers['Content-Type'] = 'application/json';
+
+        const response = await fetch(`${globalConfig.baseUrl}/api/comment/delete.php`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ comment_id: commentId })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert('删除成功');
+            location.reload();
+        } else {
+            throw new Error(result.message || '删除失败');
+        }
+    } catch (error) {
+        console.error('删除失败:', error);
+        alert('删除失败: ' + error.message);
+    }
+}
+
+async function deleteReply(replyId) {
+    if (!confirm('确定要删除这条回复吗？')) {
+        return;
+    }
+
+    if (!globalConfig.userToken) {
+        alert('未登录，无法删除回复');
+        return;
+    }
+
+    try {
+        const headers = createAuthHeaders(globalConfig.userToken);
+        headers['Content-Type'] = 'application/json';
+
+        const response = await fetch(`${globalConfig.baseUrl}/api/comment/delete.php`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ reply_id: replyId })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            alert('删除成功');
+            location.reload();
+        } else {
+            throw new Error(result.message || '删除失败');
+        }
+    } catch (error) {
+        console.error('删除失败:', error);
+        alert('删除失败: ' + error.message);
+    }
+}
+
+function bindActionButtons() {
+    // 回复按钮
+    document.querySelectorAll('.reply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const commentId = btn.dataset.commentId;
+            const authorName = btn.dataset.authorName;
+            openInputPanel('reply', commentId, authorName);
+        });
+    });
+
+    // 删除评论按钮
+    document.querySelectorAll('.delete-comment-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const commentId = btn.dataset.commentId;
+            deleteComment(commentId);
+        });
+    });
+
+    // 删除回复按钮
+    document.querySelectorAll('.delete-reply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const replyId = btn.dataset.replyId;
+            deleteReply(replyId);
+        });
+    });
+}
+
+function initInputPanel() {
+    const overlay = document.getElementById('inputOverlay');
+    const cancelBtn = document.getElementById('inputCancel');
+    const submitBtn = document.getElementById('inputSubmit');
+
+    // 点击背景关闭
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeInputPanel();
+        }
+    });
+
+    cancelBtn.addEventListener('click', closeInputPanel);
+    submitBtn.addEventListener('click', submitInput);
+}
+
+// 触摸事件处理
 document.addEventListener('touchstart', function(e) {
     const target = e.target;
     touchStartX = e.touches[0].clientX;
@@ -398,7 +679,26 @@ function initComments(config) {
     const coverUrl = config[6] || '';
     const userToken = config[7] || '';
 
-    document.getElementById('commentBtn').href = detailUrl;
+    // 保存到全局配置
+    globalConfig = {
+        baseUrl,
+        bookName,
+        bookId,
+        chapterName,
+        chapterId,
+        detailUrl,
+        coverUrl,
+        userToken
+    };
+
+    // 解析用户ID
+    currentUserId = parseUserToken(userToken);
+
+    // 初始化圆形菜单
+    initFabMenu();
+
+    // 初始化输入面板
+    initInputPanel();
 
     if (baseUrl && bookId) {
         getReview(baseUrl, bookName, chapterName, bookId, chapterId, detailUrl, coverUrl, userToken);
