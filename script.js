@@ -457,8 +457,17 @@ async function submitInput() {
         if (response.ok && result.success) {
             alert('发表成功');
             closeInputPanel();
-            // 重新加载评论
-            location.reload();
+            // 重新加载评论列表
+            await getReview(
+                globalConfig.baseUrl,
+                globalConfig.bookName,
+                globalConfig.chapterName,
+                globalConfig.bookId,
+                globalConfig.chapterId,
+                globalConfig.detailUrl,
+                globalConfig.coverUrl,
+                globalConfig.userToken
+            );
         } else {
             throw new Error(result.message || '发表失败');
         }
@@ -495,7 +504,17 @@ async function deleteComment(commentId) {
 
         if (response.ok && result.success) {
             alert('删除成功');
-            location.reload();
+            // 重新加载评论列表
+            await getReview(
+                globalConfig.baseUrl,
+                globalConfig.bookName,
+                globalConfig.chapterName,
+                globalConfig.bookId,
+                globalConfig.chapterId,
+                globalConfig.detailUrl,
+                globalConfig.coverUrl,
+                globalConfig.userToken
+            );
         } else {
             throw new Error(result.message || '删除失败');
         }
@@ -529,7 +548,17 @@ async function deleteReply(replyId) {
 
         if (response.ok && result.success) {
             alert('删除成功');
-            location.reload();
+            // 重新加载评论列表
+            await getReview(
+                globalConfig.baseUrl,
+                globalConfig.bookName,
+                globalConfig.chapterName,
+                globalConfig.bookId,
+                globalConfig.chapterId,
+                globalConfig.detailUrl,
+                globalConfig.coverUrl,
+                globalConfig.userToken
+            );
         } else {
             throw new Error(result.message || '删除失败');
         }
