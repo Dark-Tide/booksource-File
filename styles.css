@@ -195,7 +195,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .input-subtitle{font-size:13px;color:#8899a6}
 .input-tabs{display:flex;border-bottom:1px solid #e2e8f0}
 @media(prefers-color-scheme:dark){.input-tabs{border-bottom-color:#3a3a3a}}
-.input-tab-btn{padding:10px 20px;font-size:14px;font-weight:500;color:#64748b;background:none;border:none;cursor:pointer;transition:color .2s,background .2s;border-bottom:2px solid transparent}
+.input-tab-btn{flex:1 1 0;padding:10px 0;font-size:14px;font-weight:500;color:#64748b;background:none;border:none;cursor:pointer;transition:color .2s,background .2s;border-bottom:2px solid transparent;text-align:center}
 @media(prefers-color-scheme:dark){.input-tab-btn{color:#aaa}}
 .input-tab-btn.active{color:#3b82f6;border-bottom-color:#3b82f6;font-weight:600}
 @media(prefers-color-scheme:dark){.input-tab-btn.active{color:#60a5fa;border-bottom-color:#60a5fa}}
