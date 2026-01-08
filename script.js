@@ -502,7 +502,7 @@ function openInputPanel(mode, commentId = null, authorName = null) {
         subtitle.textContent = '分享你的想法';
     } else if (mode === 'reply') {
         title.textContent = '回复评论';
-        subtitle.textContent = `回复给 ${authorName}`;
+        subtitle.textContent = `@ ${authorName}`;
     }
 
     field.value = '';
