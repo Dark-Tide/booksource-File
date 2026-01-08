@@ -37,6 +37,36 @@ function parseUserToken(userToken) {
     }
 }
 
+function showToast(message, type = 'info', duration = 5000) {
+    const toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) {
+        console.warn('Toast container not found. Falling back to alert:', message);
+        alert(message);
+        return;
+    }
+
+    const toast = document.createElement('div');
+    toast.classList.add('toast-message', type);
+    
+    let icon = '';
+    if (type === 'success') icon = '✅';
+    else if (type === 'error') icon = '❎';
+    else icon = 'ℹ️';
+
+    toast.innerHTML = `<span class="toast-icon">${icon}</span><span>${message}</span>`;
+    
+    toastContainer.appendChild(toast);
+
+    void toast.offsetWidth; 
+    toast.classList.add('show');
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    }, duration);
+}
+
+
 async function processBookTags(text, baseUrl, userToken) {
     const regex = /\[bookid:(\d+)(?:\s*\|\s*([a-z,]+))?\]/g;
     let lastIndex = 0;
@@ -500,12 +530,12 @@ async function submitInput() {
     const content = field.value.trim();
 
     if (!content) {
-        alert('请输入内容');
+        showToast('请输入内容', 'error');
         return;
     }
 
     if (!globalConfig.userToken) {
-        alert('未登录，无法发表评论');
+        showToast('未登录，无法发表评论', 'error');
         return;
     }
 
@@ -547,7 +577,7 @@ async function submitInput() {
         const result = await response.json();
 
         if (response.ok && result.success) {
-            alert('发表成功');
+            showToast('发表成功', 'success');
             closeInputPanel();
             await getReview(
                 globalConfig.baseUrl,
@@ -564,7 +594,7 @@ async function submitInput() {
         }
     } catch (error) {
         console.error('发表失败:', error);
-        alert('发表失败: ' + error.message);
+        showToast('发表失败: ' + error.message, 'error');
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = '发送';
@@ -572,12 +602,12 @@ async function submitInput() {
 }
 
 async function deleteComment(commentId) {
-    if (!confirm('确定要删除这条评论吗？')) {
+    if (!confirm('确定要删除这条评论吗？')) { // confirm retained for critical action
         return;
     }
 
     if (!globalConfig.userToken) {
-        alert('未登录，无法删除评论');
+        showToast('未登录，无法删除评论', 'error');
         return;
     }
 
@@ -594,7 +624,7 @@ async function deleteComment(commentId) {
         const result = await response.json();
 
         if (response.ok && result.success) {
-            alert('删除成功');
+            showToast('删除成功', 'success');
             await getReview(
                 globalConfig.baseUrl,
                 globalConfig.bookName,
@@ -610,17 +640,17 @@ async function deleteComment(commentId) {
         }
     } catch (error) {
         console.error('删除失败:', error);
-        alert('删除失败: ' + error.message);
+        showToast('删除失败: ' + error.message, 'error');
     }
 }
 
 async function deleteReply(replyId) {
-    if (!confirm('确定要删除这条回复吗？')) {
+    if (!confirm('确定要删除这条回复吗？')) { // confirm retained for critical action
         return;
     }
 
     if (!globalConfig.userToken) {
-        alert('未登录，无法删除回复');
+        showToast('未登录，无法删除回复', 'error');
         return;
     }
 
@@ -637,7 +667,7 @@ async function deleteReply(replyId) {
         const result = await response.json();
 
         if (response.ok && result.success) {
-            alert('删除成功');
+            showToast('删除成功', 'success');
             await getReview(
                 globalConfig.baseUrl,
                 globalConfig.bookName,
@@ -653,7 +683,7 @@ async function deleteReply(replyId) {
         }
     } catch (error) {
         console.error('删除失败:', error);
-        alert('删除失败: ' + error.message);
+        showToast('删除失败: ' + error.message, 'error');
     }
 }
 
