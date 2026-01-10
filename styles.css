@@ -266,4 +266,4 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .image-viewer{position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.95)}
 .image-viewer.active{display:flex}
 .viewer-overlay{position:absolute;top:0;left:0;width:100%;height:100%}
-.image-viewer img{max-width:95%;max-height:95%;object-fit:contain;transition:transform 0.1s ease-out;position:relative;z-index:10001;touch-action:none}
+.image-viewer img{max-width:95%;max-height:95%;object-fit:contain;transition:transform 0.05s linear;position:relative;z-index:10001;touch-action:none}
