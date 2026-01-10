@@ -850,7 +850,7 @@ function initImageViewer() {
     viewer.className = 'image-viewer';
     viewer.innerHTML = `
         <div class="viewer-overlay"></div>
-        <img id="viewerImg" src="" alt="预览">
+        <img id="viewerImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="">
     `;
     document.body.appendChild(viewer);
 
@@ -865,6 +865,7 @@ function initImageViewer() {
 
     const close = () => {
         viewer.classList.remove('active');
+        viewerImg.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
         currentScale = 1;
         lastScale = 1;
         updateZoom();
@@ -876,16 +877,16 @@ function initImageViewer() {
         if (e.touches.length === 2) {
             initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
         }
-    });
+    }, {passive: false});
 
     viewerImg.addEventListener('touchmove', (e) => {
         if (e.touches.length === 2 && initialDist > 0) {
             e.preventDefault();
             const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            currentScale = Math.max(0.5, Math.min(5, (dist / initialDist) * lastScale));
+            currentScale = Math.max(1, Math.min(5, (dist / initialDist) * lastScale));
             updateZoom();
         }
-    });
+    }, {passive: false});
 
     viewerImg.addEventListener('touchend', (e) => {
         if (e.touches.length < 2) {
