@@ -1,5 +1,5 @@
 {margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#333;line-height:1.8;padding:20px;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#333;line-height:1.8;padding:20px;-webkit-tap-highlight-color:transparent;overflow-x:hidden}
 @media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#e5e5e5}}
 .container{max-width:400px;margin:0 auto;padding-bottom:80px}
 .header{background:#fff;padding:12px 20px;border-radius:8px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.1);cursor:pointer;position:relative}
@@ -180,7 +180,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 @media(prefers-color-scheme:dark){.action-btn:active{background:#3a3a3a;color:#60a5fa}}
 .action-btn.delete{color:#ef4444}
 .action-btn.delete:active{background:#fef2f2;color:#dc2626}
-@media(prefers-color-scheme:dark){.action-btn.delete:active{background:#3a2a2a;color:#ff6b6b}}
+@media(prefers-color-scheme:dark){.action-btn.delete:active{background:#3a3a3a;color:#ff6b6b}}
 .input-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:2000;display:none;align-items:center;justify-content:center;padding:20px}
 .input-overlay.active{display:flex}
 .input-panel{background:#fff;border-radius:28px;width:100%;max-width:400px;max-height:90vh;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);display:flex;flex-direction:column;transform:scale(.9);opacity:0;transition:all .3s}
@@ -266,4 +266,4 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .image-viewer{position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.95)}
 .image-viewer.active{display:flex}
 .viewer-overlay{position:absolute;top:0;left:0;width:100%;height:100%}
-.image-viewer img{max-width:95%;max-height:95%;object-fit:contain;transition:transform 0.1s ease-out;position:relative;z-index:10001}
+.image-viewer img{max-width:95%;max-height:95%;object-fit:contain;transition:transform 0.1s ease-out;position:relative;z-index:10001;touch-action:none}
