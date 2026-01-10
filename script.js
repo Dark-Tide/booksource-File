@@ -855,62 +855,70 @@ function initImageViewer() {
     document.body.appendChild(viewer);
 
     const viewerImg = document.getElementById('viewerImg');
-    let currentScale = 1;
-    let lastScale = 1;
+    let scale = 1, lastScale = 1;
+    let translateX = 0, translateY = 0;
+    let startX = 0, startY = 0;
     let initialDist = 0;
+    let isPanning = false;
 
-    const updateZoom = () => {
-        viewerImg.style.transform = `scale(${currentScale})`;
+    const updateTransform = () => {
+        viewerImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
     };
 
     const close = () => {
         viewer.classList.remove('active');
-        viewerImg.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-        currentScale = 1;
-        lastScale = 1;
-        updateZoom();
+        setTimeout(() => {
+            viewerImg.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+            scale = 1; lastScale = 1;
+            translateX = 0; translateY = 0;
+            updateTransform();
+        }, 300);
     };
 
     viewer.querySelector('.viewer-overlay').onclick = close;
 
     viewerImg.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 2) {
+        if (e.touches.length === 1) {
+            startX = e.touches[0].pageX - translateX;
+            startY = e.touches[0].pageY - translateY;
+            isPanning = true;
+        } else if (e.touches.length === 2) {
+            isPanning = false;
             initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            lastScale = scale;
         }
     }, {passive: false});
 
     viewerImg.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2 && initialDist > 0) {
+        if (e.touches.length === 1 && isPanning) {
+            e.preventDefault();
+            translateX = e.touches[0].pageX - startX;
+            translateY = e.touches[0].pageY - startY;
+            updateTransform();
+        } else if (e.touches.length === 2) {
             e.preventDefault();
             const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            currentScale = Math.max(1, Math.min(5, (dist / initialDist) * lastScale));
-            updateZoom();
+            scale = Math.max(1, Math.min(5, (dist / initialDist) * lastScale));
+            updateTransform();
         }
     }, {passive: false});
 
-    viewerImg.addEventListener('touchend', (e) => {
-        if (e.touches.length < 2) {
-            lastScale = currentScale;
-            initialDist = 0;
-        }
+    viewerImg.addEventListener('touchend', () => {
+        lastScale = scale;
+        isPanning = false;
     });
 
     document.addEventListener('click', (e) => {
         const target = e.target;
         if (target.tagName !== 'IMG' || target.id === 'viewerImg') return;
-        
-        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || 
-            target.closest('.book-card')) return;
-
-        if (target.id === 'coverImage') {
-            if (!document.getElementById('coverBox').classList.contains('expanded')) return;
-        }
+        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || target.closest('.book-card')) return;
+        if (target.id === 'coverImage' && !document.getElementById('coverBox').classList.contains('expanded')) return;
 
         viewerImg.src = target.src;
         viewer.classList.add('active');
-        currentScale = 1;
-        lastScale = 1;
-        updateZoom();
+        scale = 1; lastScale = 1;
+        translateX = 0; translateY = 0;
+        updateTransform();
     });
 }
 
