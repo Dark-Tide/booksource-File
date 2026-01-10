@@ -40,7 +40,6 @@ function parseUserToken(userToken) {
 function showToast(message, type = 'info', duration = 5000) {
     const toastContainer = document.getElementById('toastContainer');
     if (!toastContainer) {
-        console.warn('Toast container not found. Falling back to alert:', message);
         alert(message);
         return;
     }
@@ -65,7 +64,6 @@ function showToast(message, type = 'info', duration = 5000) {
         toast.addEventListener('transitionend', () => toast.remove(), { once: true });
     }, duration);
 }
-
 
 async function processBookTags(text, baseUrl, userToken) {
     const regex = /\[bookid:(\d+)(?:\s*\|\s*([a-z,]+))?\]/g;
@@ -195,7 +193,6 @@ async function renderMarkdown(text, baseUrl, userToken) {
     return marked.parse(processedSpoilerText);
 }
 
-
 function getRandomGradient() {
     const gradients = [
         ['#9a67ea', '#ff7ac7'], ['#8b5cf6', '#ec4899'], ['#7c3aed', '#db2777'],
@@ -262,13 +259,19 @@ async function getComment(data, baseUrl, userToken) {
         let actionsHtml = '';
         if (isReply) {
             actionsHtml = `<div class="reply-actions">
-                <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
-                ${isOwnComment ? `<button class="action-btn delete delete-reply-btn" data-reply-id="${comment.id}">🗑️ 删除</button>` : ''}
+                <div class="action-btns-group">
+                    <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
+                    ${isOwnComment ? `<button class="action-btn delete delete-reply-btn" data-reply-id="${comment.id}">🗑️ 删除</button>` : ''}
+                </div>
+                ${statsHtml}
             </div>`;
         } else {
             actionsHtml = `<div class="comment-actions">
-                <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
-                ${isOwnComment ? `<button class="action-btn delete delete-comment-btn" data-comment-id="${comment.id}">🗑️ 删除</button>` : ''}
+                <div class="action-btns-group">
+                    <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
+                    ${isOwnComment ? `<button class="action-btn delete delete-comment-btn" data-comment-id="${comment.id}">🗑️ 删除</button>` : ''}
+                </div>
+                ${statsHtml}
             </div>`;
         }
 
@@ -305,7 +308,6 @@ async function getComment(data, baseUrl, userToken) {
                         <span class="reply-author">${comment.authorName}</span>
                         <span class="reply-time">${comment.createdAt}</span>
                     </div>
-                    ${statsHtml}
                 </div>
                 ${badgesHtml}
                 <div class="reply-content">${contentHtml}</div>
@@ -323,7 +325,6 @@ async function getComment(data, baseUrl, userToken) {
                         <span class="comment-author">${comment.authorName}</span>
                         <span class="comment-time">${comment.createdAt}</span>
                     </div>
-                    ${statsHtml}
                 </div>
                 ${badgesHtml}
                 <div class="comment-content">${contentHtml}</div>
@@ -460,8 +461,12 @@ function initMarkdownShortcuts() {
                 textToInsert = `[${selectedText || '链接文本'}](https://example.com)`;
                 cursorOffset = selectedText ? textToInsert.length : 1;
                 break;
+            case 'image':
+                textToInsert = `![${selectedText || '图片描述'}](https://example.com/image.jpg)`;
+                cursorOffset = 2;
+                break;
             case 'bookid':
-                textToInsert = `[bookid:12345|tag,bio]`;
+                textToInsert = `[bookid:353686|tag,bio]`;
                 cursorOffset = 9;
                 break;
             case 'fold':
@@ -602,7 +607,7 @@ async function submitInput() {
 }
 
 async function deleteComment(commentId) {
-    if (!confirm('确定要删除这条评论吗？')) { // confirm retained for critical action
+    if (!confirm('确定要删除这条评论吗？')) {
         return;
     }
 
@@ -645,7 +650,7 @@ async function deleteComment(commentId) {
 }
 
 async function deleteReply(replyId) {
-    if (!confirm('确定要删除这条回复吗？')) { // confirm retained for critical action
+    if (!confirm('确定要删除这条回复吗？')) {
         return;
     }
 
@@ -839,6 +844,74 @@ function toggleRepliesTouchEnd(e) {
     }
 }
 
+function initImageViewer() {
+    const viewer = document.createElement('div');
+    viewer.id = 'imageViewer';
+    viewer.className = 'image-viewer';
+    viewer.innerHTML = `
+        <div class="viewer-overlay"></div>
+        <img id="viewerImg" src="" alt="预览">
+    `;
+    document.body.appendChild(viewer);
+
+    const viewerImg = document.getElementById('viewerImg');
+    let currentScale = 1;
+    let lastScale = 1;
+    let initialDist = 0;
+
+    const updateZoom = () => {
+        viewerImg.style.transform = `scale(${currentScale})`;
+    };
+
+    const close = () => {
+        viewer.classList.remove('active');
+        currentScale = 1;
+        lastScale = 1;
+        updateZoom();
+    };
+
+    viewer.querySelector('.viewer-overlay').onclick = close;
+
+    viewerImg.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+        }
+    });
+
+    viewerImg.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && initialDist > 0) {
+            e.preventDefault();
+            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            currentScale = Math.max(0.5, Math.min(5, (dist / initialDist) * lastScale));
+            updateZoom();
+        }
+    });
+
+    viewerImg.addEventListener('touchend', (e) => {
+        if (e.touches.length < 2) {
+            lastScale = currentScale;
+            initialDist = 0;
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.tagName !== 'IMG' || target.id === 'viewerImg') return;
+        
+        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || 
+            target.closest('.book-card')) return;
+
+        if (target.id === 'coverImage') {
+            if (!document.getElementById('coverBox').classList.contains('expanded')) return;
+        }
+
+        viewerImg.src = target.src;
+        viewer.classList.add('active');
+        currentScale = 1;
+        lastScale = 1;
+        updateZoom();
+    });
+}
 
 function initInputPanel() {
     const overlay = document.getElementById('inputOverlay');
@@ -892,7 +965,6 @@ document.addEventListener('touchstart', function(e) {
     hasMoved = false;
 }, {passive: true});
 
-
 function initComments(config) {
     const baseUrl = config[0] || '';
     const bookName = config[1] || '未知书籍';
@@ -917,14 +989,18 @@ function initComments(config) {
     currentUserId = parseUserToken(userToken);
     
     initFabMenu();
-    
+    initImageViewer();
     initInputPanel();
 
     if (baseUrl && bookId) {
         getReview(baseUrl, bookName, chapterName, bookId, chapterId, detailUrl, coverUrl, userToken);
 
         const headerBox = document.getElementById('headerBox');
-        headerBox.addEventListener('click', () => toggleCover(coverUrl));
+        headerBox.addEventListener('click', (e) => {
+            if (e.target.id !== 'coverImage') {
+                toggleCover(coverUrl);
+            }
+        });
         headerBox.style.cursor = 'pointer';
     } else {
         document.getElementById('commentsList').innerHTML = '<div class="error">缺少必要参数</div>';
