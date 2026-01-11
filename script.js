@@ -219,7 +219,9 @@ async function getComment(data, baseUrl, userToken) {
         return '<div class="no-comments"><div class="no-comments-icon">💬</div><div class="no-comments-text">暂无评论</div></div>';
     }
 
-    async function renderComment(comment, isReply = false, depth = 0, userToken) {
+    async function renderComment(comment, isReply = false, depth = 0, userToken, rootId = null) {
+        const currentRootId = (depth === 0) ? comment.id : rootId;
+
         const initial = comment.authorName ? comment.authorName.charAt(0) : '?';
         let avatarContent = '';
         let avatarStyle = '';
@@ -260,7 +262,7 @@ async function getComment(data, baseUrl, userToken) {
         if (isReply) {
             actionsHtml = `<div class="reply-actions">
                 <div class="action-btns-group">
-                    <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
+                    <button class="action-btn reply-btn" data-comment-id="${currentRootId}" data-author-name="${comment.authorName}">💬 回复</button>
                     ${isOwnComment ? `<button class="action-btn delete delete-reply-btn" data-reply-id="${comment.id}">🗑️ 删除</button>` : ''}
                 </div>
                 ${statsHtml}
@@ -268,7 +270,7 @@ async function getComment(data, baseUrl, userToken) {
         } else {
             actionsHtml = `<div class="comment-actions">
                 <div class="action-btns-group">
-                    <button class="action-btn reply-btn" data-comment-id="${comment.id}" data-author-name="${comment.authorName}">💬 回复</button>
+                    <button class="action-btn reply-btn" data-comment-id="${currentRootId}" data-author-name="${comment.authorName}">💬 回复</button>
                     ${isOwnComment ? `<button class="action-btn delete delete-comment-btn" data-comment-id="${comment.id}">🗑️ 删除</button>` : ''}
                 </div>
                 ${statsHtml}
@@ -281,7 +283,7 @@ async function getComment(data, baseUrl, userToken) {
         if (replies.length > 0) {
             if (depth === 0) {
                 const repliesId = 'replies_' + Math.random().toString(36).substr(2, 9);
-                const replyItems = await Promise.all(replies.map(reply => renderComment(reply, true, depth + 1, userToken)));
+                const replyItems = await Promise.all(replies.map(reply => renderComment(reply, true, depth + 1, userToken, currentRootId)));
                 repliesHtml = `
                     <div class="replies-toggle">
                         <div class="replies-toggle-btn" data-replies="${repliesId}">
@@ -292,7 +294,7 @@ async function getComment(data, baseUrl, userToken) {
                     <div class="replies-container" id="${repliesId}">${replyItems.join('')}</div>
                 `;
             } else {
-                const replyItems = await Promise.all(replies.map(reply => renderComment(reply, true, depth + 1, userToken)));
+                const replyItems = await Promise.all(replies.map(reply => renderComment(reply, true, depth + 1, userToken, currentRootId)));
                 repliesHtml = `<div class="replies-container expanded">${replyItems.join('')}</div>`;
             }
         }
