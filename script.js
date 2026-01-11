@@ -974,6 +974,18 @@ document.addEventListener('touchstart', function(e) {
     hasMoved = false;
 }, {passive: true});
 
+document.addEventListener('touchmove', function(e) {
+    if (!hasMoved) {
+        const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
+        const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
+
+        if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
+            hasMoved = true;
+        }
+    }
+}, {passive: true});
+
+
 function initComments(config) {
     const baseUrl = config[0] || '';
     const bookName = config[1] || '未知书籍';
