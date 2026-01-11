@@ -244,7 +244,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .input-btn.submit:active{background:#2563eb}
 .input-btn:disabled{opacity:.5;cursor:not-allowed}
 .toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:3000;display:flex;flex-direction:column;gap:10px;pointer-events:none}
-.toast-message{background-color:#333;color:#fff;padding:12px 20px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.2);opacity:0;transition:opacity .3s ease-in-out,transform .3s ease-in-out;transform:translateY(-20px);pointer-events:auto;font-size:14px;display:flex;align-items:center;gap:8px}
+.toast-message{background-color:#1e293b;color:#fff;padding:12px 20px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.2);opacity:0;transition:opacity .3s ease-in-out,transform .3s ease-in-out;transform:translateY(-20px);pointer-events:auto;font-size:14px;display:flex;align-items:center;gap:8px}
+.toast-message.show{opacity:1;transform:translateY(0)}
+.toast-message.success{background-color:#10b981;color:#fff}
+.toast-message.error{background-color:#ef4444;color:#fff}
+.toast-message.info{background-color:#3b82f6;color:#fff}
 @media(prefers-color-scheme:dark){.toast-message{background-color:#eee;color:#333}}
 .toast-message.success{background-color:#10b981}
 @media(prefers-color-scheme:dark){.toast-message.success{background-color:#059669;color:#fff}}
