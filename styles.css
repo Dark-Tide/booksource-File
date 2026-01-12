@@ -33,7 +33,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .badges-container::-webkit-scrollbar{height:2px}
 .badge-item{padding:1px 6px;border-radius:9999px;font-size:10px;font-weight:600;color:rgba(255,255,255,.96);white-space:nowrap;flex-shrink:0}
 .comment-stats,.reply-stats{display:flex;gap:12px;font-size:13px;flex-shrink:0;margin-left:auto}
-.stat-item{display:flex;align-items:center;gap:4px;color:#8899a6;white-space:nowrap}
+.stat-item{display:flex;align-items:center;gap:4px;color:#8899a6;white-space:nowrap;cursor:pointer;user-select:none;transition:transform 0.1s}
+.stat-item:active{transform:scale(1.25)}
 .stat-item.helpful{color:#10b981}
 .stat-item.not-helpful{color:#ef4444}
 .comment-content{color:#555;font-size:15px;line-height:1.8;word-wrap:break-word;overflow-wrap:break-word}
