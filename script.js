@@ -37,7 +37,7 @@ function parseUserToken(userToken) {
     }
 }
 
-function showToast(message, type = 'info', duration = 3000) {
+function showToast(message, type = 'info', duration = 5000) {
     const toastContainer = document.getElementById('toastContainer');
     if (!toastContainer) {
         alert(message);
@@ -250,8 +250,8 @@ async function getComment(data, baseUrl, userToken) {
         }
 
         let statsHtml = `<div class="${isReply ? 'reply-stats' : 'comment-stats'}">
-            <span class="stat-item helpful">👍 ${comment.helpfulCount}</span>
-            <span class="stat-item not-helpful">👎 ${comment.notHelpfulCount}</span>
+            <span class="stat-item helpful" data-id="${comment.id}" data-type="helpful">👍 ${comment.helpfulCount}</span>
+            <span class="stat-item not-helpful" data-id="${comment.id}" data-type="not_helpful">👎 ${comment.notHelpfulCount}</span>
         </div>`;
 
         const contentHtml = await renderMarkdown(comment.content, baseUrl, userToken);
@@ -386,7 +386,15 @@ function toggleCover(coverUrl) {
     if (coverBox.classList.contains('expanded')) {
         coverBox.classList.remove('expanded');
     } else {
-        coverImage.src = coverUrl;
+        if (!coverUrl || coverUrl.trim() === '') {
+            const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const bg = isDark ? '#333' : '#f1f5f9';
+            const fg = isDark ? '#666' : '#94a3b8';
+            const svg = `<svg width="300" height="400" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="${bg}"/><text x="50%" y="50%" font-family="sans-serif" font-size="40" fill="${fg}" text-anchor="middle" dominant-baseline="middle" style="writing-mode:vertical-rl">暂无封面</text></svg>`;
+            coverImage.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+        } else {
+            coverImage.src = coverUrl;
+        }
         coverBox.classList.add('expanded');
     }
 }
@@ -694,6 +702,44 @@ async function deleteReply(replyId) {
     }
 }
 
+async function handleReaction(commentId, reactionType, targetElement) {
+    if (!globalConfig.userToken) {
+        showToast('请先登录后再进行操作', 'error');
+        return;
+    }
+
+    try {
+        const headers = createAuthHeaders(globalConfig.userToken);
+        headers['Content-Type'] = 'application/json';
+
+        const response = await fetch(`${globalConfig.baseUrl}/api/comment/react.php`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({ 
+                comment_id: parseInt(commentId), 
+                reaction_type: reactionType 
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success && result.counts) {
+            const statsContainer = targetElement.closest('.comment-stats, .reply-stats');
+            if (statsContainer) {
+                const helpfulSpan = statsContainer.querySelector('.helpful');
+                const notHelpfulSpan = statsContainer.querySelector('.not-helpful');
+                if (helpfulSpan) helpfulSpan.textContent = `👍 ${result.counts.helpful}`;
+                if (notHelpfulSpan) notHelpfulSpan.textContent = `👎 ${result.counts.not_helpful}`;
+            }
+        } else {
+            throw new Error(result.message || '操作失败');
+        }
+    } catch (error) {
+        console.error('评价失败:', error);
+        showToast('操作失败: ' + error.message, 'error');
+    }
+}
+
 function bindActionButtons() {
     document.querySelectorAll('.reply-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -714,6 +760,17 @@ function bindActionButtons() {
         btn.addEventListener('click', () => {
             const replyId = btn.dataset.replyId;
             deleteReply(replyId);
+        });
+    });
+
+    document.querySelectorAll('.stat-item').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const commentId = btn.dataset.id;
+            const reactionType = btn.dataset.type;
+            if (commentId && reactionType) {
+                handleReaction(commentId, reactionType, btn);
+            }
         });
     });
 }
@@ -852,7 +909,7 @@ function initImageViewer() {
     viewer.className = 'image-viewer';
     viewer.innerHTML = `
         <div class="viewer-overlay"></div>
-        <img id="viewerImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="">
+        <img id="viewerImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="预览">
     `;
     document.body.appendChild(viewer);
 
