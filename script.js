@@ -37,7 +37,7 @@ function parseUserToken(userToken) {
     }
 }
 
-function showToast(message, type = 'info', duration = 5000) {
+function showToast(message, type = 'info', duration = 3000) {
     const toastContainer = document.getElementById('toastContainer');
     if (!toastContainer) {
         alert(message);
