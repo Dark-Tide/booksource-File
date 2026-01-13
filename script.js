@@ -13,6 +13,17 @@ const bookCache = new Map();
 let globalConfig = {};
 let currentUserId = null;
 
+const ICONS = {
+    helpful: {
+        outline: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>`,
+        filled: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>`
+    },
+    not_helpful: {
+        outline: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg>`,
+        filled: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg>`
+    }
+};
+
 const formatNumber = n => n >= 1e4 ? (n / 1e4).toFixed(1) + '万' : n.toLocaleString();
 
 function createAuthHeaders(userToken) {
@@ -249,9 +260,19 @@ async function getComment(data, baseUrl, userToken) {
             </div>`;
         }
 
+        const reactions = comment.userReactions || [];
+        const isHelpfulActive = reactions.includes('helpful');
+        const isNotHelpfulActive = reactions.includes('not_helpful');
+
         let statsHtml = `<div class="${isReply ? 'reply-stats' : 'comment-stats'}">
-            <span class="stat-item helpful" data-id="${comment.id}" data-type="helpful">👍 ${comment.helpfulCount}</span>
-            <span class="stat-item not-helpful" data-id="${comment.id}" data-type="not_helpful">👎 ${comment.notHelpfulCount}</span>
+            <span class="stat-item helpful ${isHelpfulActive ? 'active' : ''}" data-id="${comment.id}" data-type="helpful">
+                ${isHelpfulActive ? ICONS.helpful.filled : ICONS.helpful.outline}
+                <span class="count">${comment.helpfulCount}</span>
+            </span>
+            <span class="stat-item not-helpful ${isNotHelpfulActive ? 'active' : ''}" data-id="${comment.id}" data-type="not_helpful">
+                ${isNotHelpfulActive ? ICONS.not_helpful.filled : ICONS.not_helpful.outline}
+                <span class="count">${comment.notHelpfulCount}</span>
+            </span>
         </div>`;
 
         const contentHtml = await renderMarkdown(comment.content, baseUrl, userToken);
@@ -726,10 +747,19 @@ async function handleReaction(commentId, reactionType, targetElement) {
         if (response.ok && result.success && result.counts) {
             const statsContainer = targetElement.closest('.comment-stats, .reply-stats');
             if (statsContainer) {
-                const helpfulSpan = statsContainer.querySelector('.helpful');
-                const notHelpfulSpan = statsContainer.querySelector('.not-helpful');
-                if (helpfulSpan) helpfulSpan.textContent = `👍 ${result.counts.helpful}`;
-                if (notHelpfulSpan) notHelpfulSpan.textContent = `👎 ${result.counts.not_helpful}`;
+                const helpfulBtn = statsContainer.querySelector('.helpful');
+                const notHelpfulBtn = statsContainer.querySelector('.not-helpful');
+
+                helpfulBtn.querySelector('.count').textContent = result.counts.helpful;
+                notHelpfulBtn.querySelector('.count').textContent = result.counts.not_helpful;
+
+                const btn = (reactionType === 'helpful') ? helpfulBtn : notHelpfulBtn;
+                const isActive = btn.classList.toggle('active');
+                
+                btn.innerHTML = `
+                    ${isActive ? ICONS[reactionType].filled : ICONS[reactionType].outline}
+                    <span class="count">${result.counts[reactionType]}</span>
+                `;
             }
         } else {
             throw new Error(result.message || '操作失败');
