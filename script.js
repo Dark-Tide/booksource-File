@@ -733,13 +733,19 @@ async function handleReaction(commentId, reactionType, targetElement) {
         const headers = createAuthHeaders(globalConfig.userToken);
         headers['Content-Type'] = 'application/json';
 
+        const isReply = targetElement.closest('.reply-stats') !== null;
+        const body = { reaction_type: reactionType };
+        
+        if (isReply) {
+            body.reply_id = parseInt(commentId);
+        } else {
+            body.comment_id = parseInt(commentId);
+        }
+
         const response = await fetch(`${globalConfig.baseUrl}/api/comment/react.php`, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({ 
-                comment_id: parseInt(commentId), 
-                reaction_type: reactionType 
-            })
+            body: JSON.stringify(body)
         });
 
         const result = await response.json();
