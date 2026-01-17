@@ -132,7 +132,7 @@ function renderBookCard(element, bookData, showTags, showBio, baseUrl, bookId) {
     const hasBio = showBio && description && description.trim().length > 0;
 
     const cardLink = document.createElement('a');
-    cardLink.href = `legado://import/addToBookshelf?src=${baseUrl}/book-detail/${bookId},{"origin":"汉化论坛Top"}`;
+    cardLink.href = `legado://import/addToBookshelf?src=${baseUrl}/book/${bookId},{"origin":"汉化论坛Top"}`;
     cardLink.style.cssText = 'text-decoration:none;color:inherit;display:block';
     cardLink.innerHTML = `
         <div class="book-card">
