@@ -274,7 +274,5 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .reply-item .book-tags-section,.reply-item .book-description{padding:8px 12px}
 .reply-item .book-tag{font-size:10px;padding:1px 6px}
 .reply-item .book-description{font-size:12px}
-.image-viewer{position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.95)}
-.image-viewer.active{display:flex}
-.viewer-overlay{position:absolute;top:0;left:0;width:100%;height:100%}
-.image-viewer img{max-width:95%;max-height:95%;object-fit:contain;transition:transform 0.05s linear;position:relative;z-index:10001;touch-action:none}
+.viewer-toolbar > ul > li { width: 32px; height: 32px; margin: 4px; }
+.viewer-toolbar > ul > li::before { margin: 6px; }
