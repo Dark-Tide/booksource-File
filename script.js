@@ -57,14 +57,14 @@ function showToast(message, type = 'info', duration = 3000) {
 
     const toast = document.createElement('div');
     toast.classList.add('toast-message', type);
-    
+
     let icon = '';
     if (type === 'success') icon = '✅';
     else if (type === 'error') icon = '❎';
     else icon = 'ℹ️';
 
     toast.innerHTML = `<span class="toast-icon">${icon}</span><span>${message}</span>`;
-    
+
     toastContainer.appendChild(toast);
 
     void toast.offsetWidth; 
@@ -91,7 +91,7 @@ async function processBookTags(text, baseUrl, userToken) {
         const cardId = `book-card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
         result += `<div id="${cardId}"></div>`;
-        
+
         setTimeout(() => loadBookCard(bookId, cardId, baseUrl, showTags, showBio, userToken), 0);
         lastIndex = regex.lastIndex;
     }
@@ -182,7 +182,7 @@ async function processFoldTags(text, baseUrl, userToken) {
         const title = match[1];
         const content = match[2];
         const foldId = 'fold_' + Math.random().toString(36).substr(2, 9);
-        
+
         const renderedContent = await renderMarkdown(content.trim(), baseUrl, userToken);
 
         resultParts.push(`\n\n<div class="fold-container">
@@ -276,9 +276,9 @@ async function getComment(data, baseUrl, userToken) {
         </div>`;
 
         const contentHtml = await renderMarkdown(comment.content, baseUrl, userToken);
-        
+
         const isOwnComment = currentUserId && comment.authorId === currentUserId;
-        
+
         let actionsHtml = '';
         if (isReply) {
             actionsHtml = `<div class="reply-actions">
@@ -391,7 +391,7 @@ async function getReview(baseUrl, bookName, chapterName, bookId, chapterId, deta
                 avatar.style.background = getRandomGradient();
             }
         });
-        
+
         bindInteractiveElements(document.getElementById('commentsList'));
         bindActionButtons();
     } catch (error) {
@@ -544,7 +544,7 @@ function openInputPanel(mode, commentId = null, authorName = null) {
     field.value = '';
     overlay.classList.add('active');
     field.focus();
-    
+
     editTabBtn.classList.add('active');
     previewTabBtn.classList.remove('active');
     editTabContent.classList.add('active');
@@ -735,7 +735,7 @@ async function handleReaction(commentId, reactionType, targetElement) {
 
         const isReply = targetElement.closest('.reply-stats') !== null;
         const body = { reaction_type: reactionType };
-        
+
         if (isReply) {
             body.reply_id = parseInt(commentId);
         } else {
@@ -761,7 +761,7 @@ async function handleReaction(commentId, reactionType, targetElement) {
 
                 const btn = (reactionType === 'helpful') ? helpfulBtn : notHelpfulBtn;
                 const isActive = btn.classList.toggle('active');
-                
+
                 btn.innerHTML = `
                     ${isActive ? ICONS[reactionType].filled : ICONS[reactionType].outline}
                     <span class="count">${result.counts[reactionType]}</span>
@@ -784,14 +784,14 @@ function bindActionButtons() {
             openInputPanel('reply', commentId, authorName);
         });
     });
-    
+
     document.querySelectorAll('.delete-comment-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const commentId = btn.dataset.commentId;
             deleteComment(commentId);
         });
     });
-    
+
     document.querySelectorAll('.delete-reply-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const replyId = btn.dataset.replyId;
@@ -822,14 +822,14 @@ function bindInteractiveElements(container) {
         spoiler.addEventListener('touchmove', spoilerTouchMove, {passive: true});
         spoiler.addEventListener('touchend', spoilerTouchEnd, {passive: false});
     });
-    
+
     container.querySelectorAll('.fold-header').forEach(header => {
         header.removeEventListener('click', toggleFoldClick);
         header.removeEventListener('touchend', toggleFoldTouchEnd);
         header.addEventListener('click', toggleFoldClick);
         header.addEventListener('touchend', toggleFoldTouchEnd, {passive: false});
     });
-    
+
     container.querySelectorAll('.replies-toggle-btn').forEach(btn => {
         btn.removeEventListener('click', toggleRepliesClick);
         btn.removeEventListener('touchend', toggleRepliesTouchEnd);
@@ -940,80 +940,35 @@ function toggleRepliesTouchEnd(e) {
 }
 
 function initImageViewer() {
-    const viewer = document.createElement('div');
-    viewer.id = 'imageViewer';
-    viewer.className = 'image-viewer';
-    viewer.innerHTML = `
-        <div class="viewer-overlay"></div>
-        <img id="viewerImg" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="预览">
-    `;
-    document.body.appendChild(viewer);
-
-    const viewerImg = document.getElementById('viewerImg');
-    let scale = 1, lastScale = 1;
-    let translateX = 0, translateY = 0;
-    let startX = 0, startY = 0;
-    let initialDist = 0;
-    let isPanning = false;
-
-    const updateTransform = () => {
-        viewerImg.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
-    };
-
-    const close = () => {
-        viewer.classList.remove('active');
-        setTimeout(() => {
-            viewerImg.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-            scale = 1; lastScale = 1;
-            translateX = 0; translateY = 0;
-            updateTransform();
-        }, 300);
-    };
-
-    viewer.querySelector('.viewer-overlay').onclick = close;
-
-    viewerImg.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-            startX = e.touches[0].pageX - translateX;
-            startY = e.touches[0].pageY - translateY;
-            isPanning = true;
-        } else if (e.touches.length === 2) {
-            isPanning = false;
-            initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            lastScale = scale;
-        }
-    }, {passive: false});
-
-    viewerImg.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 1 && isPanning) {
-            e.preventDefault();
-            translateX = e.touches[0].pageX - startX;
-            translateY = e.touches[0].pageY - startY;
-            updateTransform();
-        } else if (e.touches.length === 2) {
-            e.preventDefault();
-            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-            scale = Math.max(1, Math.min(5, (dist / initialDist) * lastScale));
-            updateTransform();
-        }
-    }, {passive: false});
-
-    viewerImg.addEventListener('touchend', () => {
-        lastScale = scale;
-        isPanning = false;
-    });
-
     document.addEventListener('click', (e) => {
         const target = e.target;
-        if (target.tagName !== 'IMG' || target.id === 'viewerImg') return;
-        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || target.closest('.book-card')) return;
+        if (target.tagName !== 'IMG') return;
+        
+        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || 
+            target.closest('.user-avatar') || target.closest('.reply-avatar') || 
+            target.closest('.book-card')) return;
+        
         if (target.id === 'coverImage' && !document.getElementById('coverBox').classList.contains('expanded')) return;
-
-        viewerImg.src = target.src;
-        viewer.classList.add('active');
-        scale = 1; lastScale = 1;
-        translateX = 0; translateY = 0;
-        updateTransform();
+        
+        const viewer = new Viewer(target, {
+            navbar: false,
+            title: false,
+            toolbar: {
+                zoomIn: 1,
+                zoomOut: 1,
+                oneToOne: 1,
+                reset: 1,
+                rotateLeft: 1,
+                rotateRight: 1,
+                flipHorizontal: 1,
+                flipVertical: 1,
+            },
+            keyboard: false,
+            hidden() {
+                viewer.destroy();
+            }
+        });
+        viewer.show();
     });
 }
 
@@ -1026,7 +981,7 @@ function initInputPanel() {
     const tabButtons = document.querySelectorAll('.input-tab-btn');
     const tabContents = document.querySelectorAll('.input-tab-content');
     const markdownShortcuts = document.getElementById('markdownShortcuts');
-    
+
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
             closeInputPanel();
@@ -1035,7 +990,7 @@ function initInputPanel() {
 
     cancelBtn.addEventListener('click', closeInputPanel);
     submitBtn.addEventListener('click', submitInput);
-    
+
     tabButtons.forEach(button => {
         button.addEventListener('click', async () => {
             const targetTab = button.dataset.tab;
@@ -1052,14 +1007,14 @@ function initInputPanel() {
                 previewDiv.innerHTML = '<div class="book-loading">渲染中...</div>';
                 const renderedHtml = await renderMarkdown(markdownText, globalConfig.baseUrl, globalConfig.userToken);
                 previewDiv.innerHTML = renderedHtml;
-                
+
 bindInteractiveElements(previewDiv);
             } else {
                 markdownShortcuts.classList.remove('hidden');
             }
         });
     });
-    
+
     initMarkdownShortcuts();
 }
 
@@ -1090,7 +1045,7 @@ function initComments(config) {
     const detailUrl = config[5] || '#';
     const coverUrl = config[6] || '';
     const userToken = config[7] || '';
-    
+
     globalConfig = {
         baseUrl,
         bookName,
@@ -1101,9 +1056,9 @@ function initComments(config) {
         coverUrl,
         userToken
     };
-    
+
     currentUserId = parseUserToken(userToken);
-    
+
     initFabMenu();
     initImageViewer();
     initInputPanel();
