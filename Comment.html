@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,maximum-scale=1.0,user-scalable=no">
+    <title>评论展示</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.css">
+    <link rel="stylesheet" href="https://fastly.jsdelivr.net/gh/Dark-Tide/booksource-File@5a543a7c96a25aaf3137a0918a73e7b33017fdb7/styles.css">
+</head>
+<body>
+    <div id="toastContainer" class="toast-container"></div>
+
+    <div class="container">
+        <div class="header" id="headerBox">
+            <h1 id="bookTitle">加载中...</h1>
+            <p id="chapterTitle">加载中...</p>
+            <div class="cover-box" id="coverBox">
+                <img id="coverImage" class="cover-image" alt="封面">
+            </div>
+        </div>
+        <div class="comments-list" id="commentsList">
+            <div class="loading">加载中,请等待片刻...</div>
+        </div>
+        <div class="bottom-line">
+            <span>--------我也是有底线的---------</span>
+        </div>
+    </div>
+    
+    <div class="fab-menu">
+        <div class="fab-options" id="fabOptions">
+            <button class="fab-option" id="fabJump">
+                <span class="fab-option-icon">🔗</span>
+                <span class="fab-option-label">跳转</span>
+            </button>
+            <button class="fab-option" id="fabComment">
+                <span class="fab-option-icon">💬</span>
+                <span class="fab-option-label">评论</span>
+            </button>
+        </div>
+        <button class="fab-main" id="fabMain">
+            <span class="fab-icon">+</span>
+        </button>
+    </div>
+    
+    <div class="input-overlay" id="inputOverlay">
+        <div class="input-panel">
+            <div class="input-header">
+                <div class="input-title" id="inputTitle">发表评论</div>
+                <div class="input-subtitle" id="inputSubtitle">分享你的想法</div>
+            </div>
+            <div class="input-tabs">
+                <button class="input-tab-btn active" data-tab="edit">编辑</button>
+                <button class="input-tab-btn" data-tab="preview">预览</button>
+            </div>
+            <div class="input-body">
+                <div class="markdown-shortcuts" id="markdownShortcuts">
+                    <button class="shortcut-btn" data-syntax="bold">B</button>
+                    <button class="shortcut-btn" data-syntax="italic">I</button>
+                    <button class="shortcut-btn" data-syntax="image">🖼图片</button>
+                    <button class="shortcut-btn" data-syntax="code-inline">`代码`</button>
+                    <button class="shortcut-btn" data-syntax="code-block">```代码```</button>
+                    <button class="shortcut-btn" data-syntax="blockquote">“引用”</button>
+                    <button class="shortcut-btn" data-syntax="list">• 列表</button>
+                    <button class="shortcut-btn" data-syntax="link">🔗 链接</button>
+                    <button class="shortcut-btn" data-syntax="fold">▽ 折叠</button>
+                    <button class="shortcut-btn" data-syntax="spoiler">剧透</button>
+                    <button class="shortcut-btn" data-syntax="bookid">📚 推荐卡片</button>
+                </div>
+                <div class="input-tab-content active" data-tab-content="edit">
+                    <textarea class="input-field" id="inputField" placeholder="输入内容..."></textarea>
+                </div>
+                <div class="input-tab-content" data-tab-content="preview">
+                    <div class="input-preview" id="inputPreview"></div>
+                </div>
+            </div>
+            <div class="input-footer">
+                <button class="input-btn cancel" id="inputCancel">取消</button>
+                <button class="input-btn submit" id="inputSubmit">发送</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.6/viewer.min.js"></script>
+    <script src="https://fastly.jsdelivr.net/gh/Dark-Tide/booksource-File@5a543a7c96a25aaf3137a0918a73e7b33017fdb7/script.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const config = ◎Data;
+            
+            initComments(config);
+        });
+    </script>
+</body>
+</html>
