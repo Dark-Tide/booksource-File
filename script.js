@@ -943,13 +943,11 @@ function initImageViewer() {
     document.addEventListener('click', (e) => {
         const target = e.target;
         if (target.tagName !== 'IMG') return;
-        
-        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || 
-            target.closest('.user-avatar') || target.closest('.reply-avatar') || 
-            target.closest('.book-card')) return;
-        
+
+        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || target.closest('.book-card')) return;
+
         if (target.id === 'coverImage' && !document.getElementById('coverBox').classList.contains('expanded')) return;
-        
+
         const viewer = new Viewer(target, {
             navbar: false,
             title: false,
