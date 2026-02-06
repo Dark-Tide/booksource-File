@@ -944,7 +944,7 @@ function initImageViewer() {
         const target = e.target;
         if (target.tagName !== 'IMG') return;
 
-        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || target.closest('.book-card')) return;
+        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || target.closest('.book-card') || target.closest('.viewer-container')) return;
 
         if (target.id === 'coverImage' && !document.getElementById('coverBox').classList.contains('expanded')) return;
 
