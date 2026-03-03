@@ -204,23 +204,41 @@ async function renderMarkdown(text, baseUrl, userToken) {
     return marked.parse(processedSpoilerText);
 }
 
-function getRandomGradient() {
-    const gradients = [
-        ['#9a67ea', '#ff7ac7'], ['#8b5cf6', '#ec4899'], ['#7c3aed', '#db2777'],
-        ['#6366f1', '#d946ef'], ['#3b82f6', '#a855f7'], ['#f59e0b', '#ef4444'],
-        ['#f97316', '#dc2626'], ['#ea580c', '#b91c1c'], ['#059669', '#0891b2'],
-        ['#10b981', '#06b6d4'], ['#14b8a6', '#0ea5e9'], ['#06b6d4', '#3b82f6'],
-        ['#0284c7', '#6366f1'], ['#6366f1', '#ec4899'], ['#7c3aed', '#e11d48'],
-        ['#8b5cf6', '#f43f5e'], ['#a855f7', '#ef4444'], ['#d946ef', '#f97316'],
-        ['#ec4899', '#f59e0b'], ['#be185d', '#ea580c'], ['#047857', '#0369a1'],
-        ['#059669', '#0284c7'], ['#10b981', '#0891b2'], ['#14b8a6', '#06b6d4'],
-        ['#0d9488', '#0284c7'], ['#dc2626', '#7c2d12'], ['#b91c1c', '#92400e'],
-        ['#991b1b', '#78350f'], ['#6d28d9', '#be185d'], ['#5b21b6', '#9d174d']
-    ];
+function extractBadgeBackground(badgeCss) {
+    if (!badgeCss) return null;
+    const blockMatch = badgeCss.match(/\.badge\s*\{([^}]*)\}/);
+    if (!blockMatch) return null;
+    const block = blockMatch[1];
 
-    const colors = gradients[Math.floor(Math.random() * gradients.length)];
-    const angle = Math.floor(Math.random() * 360);
-    return `linear-gradient(${angle}deg, ${colors[0]}, ${colors[1]})`;
+    const bgImageMatch = block.match(/background-image\s*:\s*([^;]+)/);
+    if (bgImageMatch) {
+        const bgImage = bgImageMatch[1].trim();
+        const bgSizeMatch = block.match(/background-size\s*:\s*([^;]+)/);
+        const bgPosMatch  = block.match(/background-position\s*:\s*([^;]+)/);
+        let style = `background-image:${bgImage};background-repeat:no-repeat;`;
+        if (bgSizeMatch) style += `background-size:${bgSizeMatch[1].trim()};`;
+        if (bgPosMatch)  style += `background-position:${bgPosMatch[1].trim()};`;
+        return style;
+    }
+
+    const bgMatch = block.match(/(?<![a-z-])background\s*:\s*([^;]+)/);
+    if (bgMatch) return `background:${bgMatch[1].trim()};`;
+
+    const bgColorMatch = block.match(/background-color\s*:\s*([^;]+)/);
+    if (bgColorMatch) return `background-color:${bgColorMatch[1].trim()};`;
+
+    return null;
+}
+
+function extractBadgeImageUrl(badgeCss) {
+    if (!badgeCss) return null;
+    const blockMatch = badgeCss.match(/\.badge\s*\{([\s\S]*?)\}/);
+    if (!blockMatch) return null;
+    const block = blockMatch[1];
+    const urlMatch = block.match(/background-image:\s*url\('(.*?)'\);/);
+    if (urlMatch) return urlMatch[1].trim();
+
+    return null;
 }
 
 async function getComment(data, baseUrl, userToken) {
@@ -252,9 +270,15 @@ async function getComment(data, baseUrl, userToken) {
         }
 
         if (comment.authorBadges && comment.authorBadges.length > 0) {
-            const badgeItems = comment.authorBadges.map(badge => 
-                `<span class="${isReply ? 'reply-badge-item' : 'badge-item'}" style="background:${getRandomGradient()}">${badge.name}</span>`
-            ).join('');
+            const badgeItems = comment.authorBadges.map(badge => {
+                const imgUrl = extractBadgeImageUrl(badge.badge_css);
+                if (imgUrl) {
+                    return `<img src="${imgUrl}" class="${isReply ? 'reply-badge-item' : 'badge-item'} badge-image-item" alt="${badge.name}" title="${badge.name}" style="cursor:pointer;">`;
+                }
+                const bgStyle = extractBadgeBackground(badge.badge_css);
+                const styleAttr = bgStyle ? ` style="${bgStyle}"` : '';
+                return `<span class="${isReply ? 'reply-badge-item' : 'badge-item'}"${styleAttr}>${badge.name}</span>`;
+            }).join('');
             badgesHtml = `<div class="${isReply ? 'reply-badges-section' : 'badges-section'}">
                 <div class="${isReply ? 'reply-badges-container' : 'badges-container'}">${badgeItems}</div>
             </div>`;
@@ -385,12 +409,6 @@ async function getReview(baseUrl, bookName, chapterName, bookId, chapterId, deta
         }
 
         document.getElementById('commentsList').innerHTML = allCommentsHtml;
-
-        document.querySelectorAll('.user-avatar, .reply-avatar').forEach(avatar => {
-            if (!avatar.querySelector('img')) {
-                avatar.style.background = getRandomGradient();
-            }
-        });
 
         bindInteractiveElements(document.getElementById('commentsList'));
         bindActionButtons();
