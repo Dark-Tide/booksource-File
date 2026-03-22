@@ -12,6 +12,8 @@ const bookCache = new Map();
 
 let globalConfig = {};
 let currentUserId = null;
+let cachedComments = [];
+let currentSort = 'default';
 
 const ICONS = {
     helpful: {
@@ -241,8 +243,7 @@ function extractBadgeImageUrl(badgeCss) {
     return null;
 }
 
-async function getComment(data, baseUrl, userToken) {
-    const comments = data.comments;
+async function getComment(comments, baseUrl, userToken) {
 
     if (!comments || comments.length === 0) {
         return '<div class="no-comments"><div class="no-comments-icon">💬</div><div class="no-comments-text">暂无评论</div></div>';
@@ -394,28 +395,106 @@ async function getReview(baseUrl, bookName, chapterName, bookId, chapterId, deta
         document.getElementById('bookTitle').textContent = bookName;
         document.getElementById('chapterTitle').textContent = chapterName || '书评';
 
-        let allCommentsHtml = '';
         const headers = createAuthHeaders(userToken);
 
         const firstResponse = await fetch(`${apiUrl}&page=1`, { headers });
         const firstData = await firstResponse.json();
-        allCommentsHtml += await getComment(firstData, baseUrl, userToken);
+        let allComments = firstData.comments || [];
 
         const totalPages = firstData.pages || 1;
         for (let page = 2; page <= totalPages; page++) {
             const response = await fetch(`${apiUrl}&page=${page}`, { headers });
             const data = await response.json();
-            allCommentsHtml += await getComment(data, baseUrl, userToken);
+            allComments = allComments.concat(data.comments || []);
         }
 
-        document.getElementById('commentsList').innerHTML = allCommentsHtml;
+        cachedComments = allComments;
+        await renderSortedComments();
 
-        bindInteractiveElements(document.getElementById('commentsList'));
-        bindActionButtons();
     } catch (error) {
         console.error('加载评论失败:', error);
         document.getElementById('commentsList').innerHTML = '<div class="error">加载失败,请稍后重试</div>';
     }
+}
+
+function getSortedComments() {
+    const list = [...cachedComments];
+    if (currentSort === 'reverse') {
+        list.reverse();
+    } else if (currentSort === 'hot') {
+        list.sort((a, b) => (b.helpfulCount || 0) - (a.helpfulCount || 0));
+    }
+    return list;
+}
+
+async function renderSortedComments() {
+    document.getElementById('commentsList').innerHTML = '<div class="loading">排序中...</div>';
+    const sorted = getSortedComments();
+    const html = await getComment(sorted, globalConfig.baseUrl, globalConfig.userToken);
+    document.getElementById('commentsList').innerHTML = html;
+    bindInteractiveElements(document.getElementById('commentsList'));
+    bindActionButtons();
+}
+
+function initSortBar() {
+    const btn = document.getElementById('sortBarBtn');
+    const dropdown = document.getElementById('sortDropdown');
+    const label = document.getElementById('sortBarLabel');
+    const arrow = document.getElementById('sortBarArrow');
+
+    if (!btn) return;
+
+    const options = Array.from(dropdown.querySelectorAll('.sort-option'));
+    const LABELS = { default: '默认排序', reverse: '倒序', hot: '热度优先' };
+
+    function syncWidth() {
+        dropdown.style.visibility = 'hidden';
+        dropdown.style.display = 'flex';
+        const ddW = dropdown.offsetWidth;
+        dropdown.style.display = '';
+        dropdown.style.visibility = '';
+        const w = Math.max(btn.offsetWidth, ddW);
+        btn.style.width = w + 'px';
+        dropdown.style.width = w + 'px';
+    }
+
+    function openDropdown() {
+        syncWidth();
+        dropdown.classList.add('open');
+        arrow.textContent = '▴';
+    }
+
+    function closeDropdown() {
+        dropdown.classList.remove('open');
+        arrow.textContent = '▾';
+    }
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.contains('open') ? closeDropdown() : openDropdown();
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!btn.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
+    });
+
+    async function handleOptionSelect(opt) {
+        const sort = opt.dataset.sort;
+        closeDropdown();
+        if (sort === currentSort) return;
+        currentSort = sort;
+        options.forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        label.textContent = LABELS[sort];
+        await renderSortedComments();
+    }
+
+    options.forEach(opt => {
+        opt.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await handleOptionSelect(opt);
+        });
+    });
 }
 
 function toggleCover(coverUrl) {
@@ -1078,6 +1157,7 @@ function initComments(config) {
     initFabMenu();
     initImageViewer();
     initInputPanel();
+    initSortBar();
 
     if (baseUrl && bookId) {
         getReview(baseUrl, bookName, chapterName, bookId, chapterId, detailUrl, coverUrl, userToken);
