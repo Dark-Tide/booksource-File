@@ -304,6 +304,11 @@ async function getComment(comments, baseUrl, userToken) {
 
         const isOwnComment = currentUserId && comment.authorId === currentUserId;
 
+        let replyToTagHtml = '';
+        if (isReply && comment.replyToName) {
+            replyToTagHtml = `<div class="reply-to-tag">@ ${comment.replyToName}</div>`;
+        }
+
         let actionsHtml = '';
         if (isReply) {
             actionsHtml = `<div class="reply-actions">
@@ -347,6 +352,7 @@ async function getComment(comments, baseUrl, userToken) {
 
         if (isReply) {
             return `<div class="reply-item">
+                ${replyToTagHtml}
                 <div class="reply-header">
                     <div class="reply-avatar-container">
                         <div class="reply-avatar"${avatarStyle}>${avatarContent}</div>
