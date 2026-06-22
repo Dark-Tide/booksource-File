@@ -198,10 +198,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .fab-option-label{position:absolute;right:56px;white-space:nowrap;background:#333;color:#fff;padding:6px 12px;border-radius:4px;font-size:12px;opacity:0;pointer-events:none;transition:opacity .2s}
 @media(prefers-color-scheme:dark){.fab-option-label{background:#fff;color:#333}}
 .fab-option:hover .fab-option-label{opacity:1}
-.comment-actions,.reply-actions{display:flex;align-items:center;justify-content:space-between;margin-top:12px;margin-left:54px}
-@media(max-width:380px){.comment-actions,.reply-actions{margin-left:0}}
-.reply-actions{margin-top:8px;margin-left:42px}
-@media(max-width:380px){.reply-actions{margin-left:0}}
+
+/* 核心修正：主评论和回复的操作栏在所有设备上统一保持左边距为 0 */
+.comment-actions, .reply-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    margin-left: 0; /* 统一设为 0，不再设置大屏缩进，彻底解决跳动问题 */
+}
+.reply-actions {
+    margin-top: 8px;
+    margin-left: 0; /* 统一设为 0 */
+}
+
 .action-btns-group{display:flex;gap:2px}
 .action-btn{background:none;border:none;color:#8899a6;font-size:13px;cursor:pointer;padding:4px 4px;border-radius:4px;transition:all .2s;display:flex;align-items:center;gap:4px}
 .action-btn:active{background:#f1f5f9;color:#3b82f6}
