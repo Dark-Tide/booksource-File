@@ -1,6 +1,7 @@
 marked.setOptions({breaks: true, gfm: true});
 
 let pressTimer = null;
+let avatarPressTimer = null;
 let startTime = 0;
 let touchStartX = 0;
 let touchStartY = 0;
@@ -76,6 +77,55 @@ function showToast(message, type = 'info', duration = 3000) {
         toast.classList.remove('show');
         toast.addEventListener('transitionend', () => toast.remove(), { once: true });
     }, duration);
+}
+
+async function blockUser(userId, btnElement) {
+    if (!confirm('确定要屏蔽该用户吗？屏蔽后将无法看到其后续发言。')) return;
+    
+    try {
+        const headers = createAuthHeaders(globalConfig.userToken);
+        headers['Content-Type'] = 'application/json';
+        
+        const response = await fetch(`${globalConfig.baseUrl}/api/v2/users/${userId}/block`, {
+            method: 'POST',
+            headers: headers
+        });
+
+        if (response.ok) {
+            showToast('屏蔽成功', 'success');
+            btnElement.classList.remove('show');
+            await getReview(globalConfig.baseUrl, globalConfig.bookName, globalConfig.chapterName, globalConfig.bookId, globalConfig.chapterId, globalConfig.detailUrl, globalConfig.coverUrl, globalConfig.userToken);
+        } else {
+            throw new Error('请求失败');
+        }
+    } catch (error) {
+        showToast('屏蔽失败: ' + error.message, 'error');
+    }
+}
+
+function initAvatarLongPress(container) {
+    document.addEventListener('click', (e) => {
+        if (!e.target.classList.contains('block-btn')) {
+            document.querySelectorAll('.block-btn.show').forEach(b => b.classList.remove('show'));
+        }
+    });
+
+    container.querySelectorAll('.user-avatar-container, .reply-avatar-container').forEach(avatar => {
+        const blockBtn = avatar.querySelector('.block-btn');
+        if (!blockBtn) return;
+
+        avatar.addEventListener('touchstart', (e) => {
+            avatarPressTimer = setTimeout(() => {
+                document.querySelectorAll('.block-btn.show').forEach(b => b.classList.remove('show'));
+                blockBtn.classList.add('show');
+            }, 600);
+        }, {passive: true});
+
+        const clearTimer = () => clearTimeout(avatarPressTimer);
+        avatar.addEventListener('touchend', clearTimer);
+        avatar.addEventListener('touchmove', clearTimer);
+        avatar.addEventListener('mousedown', clearTimer);
+    });
 }
 
 async function processBookTags(text, baseUrl, userToken) {
@@ -258,6 +308,13 @@ async function getComment(comments, baseUrl, userToken) {
         let frameHtml = '';
         let badgesHtml = '';
 
+        // 新增：屏蔽按钮逻辑
+        const isOwnComment = currentUserId && comment.authorId === currentUserId;
+        let blockBtnHtml = '';
+        if (!isOwnComment && currentUserId) {
+            blockBtnHtml = `<button class="block-btn" onclick="event.stopPropagation(); blockUser('${comment.authorId}', this)">屏蔽</button>`;
+        }
+
         if (comment.authorAvatar) {
             avatarContent = `<img src="${comment.authorAvatar}" alt="${comment.authorName}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
             avatarStyle = ' style="background:none;overflow:hidden"';
@@ -301,8 +358,6 @@ async function getComment(comments, baseUrl, userToken) {
         </div>`;
 
         const contentHtml = await renderMarkdown(comment.content, baseUrl, userToken);
-
-        const isOwnComment = currentUserId && comment.authorId === currentUserId;
 
         let replyToTagHtml = '';
         if (isReply && comment.replyToName) {
@@ -357,6 +412,7 @@ async function getComment(comments, baseUrl, userToken) {
                     <div class="reply-avatar-container">
                         <div class="reply-avatar"${avatarStyle}>${avatarContent}</div>
                         ${frameHtml}
+                        ${blockBtnHtml}
                     </div>
                     <div class="reply-info">
                         <span class="reply-author">${comment.authorName}</span>
@@ -374,6 +430,7 @@ async function getComment(comments, baseUrl, userToken) {
                     <div class="user-avatar-container">
                         <div class="user-avatar"${avatarStyle}>${avatarContent}</div>
                         ${frameHtml}
+                        ${blockBtnHtml}
                     </div>
                     <div class="user-info">
                         <span class="comment-author">${comment.authorName}</span>
@@ -939,6 +996,9 @@ function bindInteractiveElements(container) {
         btn.addEventListener('click', toggleRepliesClick);
         btn.addEventListener('touchend', toggleRepliesTouchEnd, {passive: false});
     });
+
+    // 新增：绑定头像长按
+    initAvatarLongPress(container);
 }
 
 function revealSpoilerClick(e) {
@@ -1109,7 +1169,7 @@ function initInputPanel() {
                 const renderedHtml = await renderMarkdown(markdownText, globalConfig.baseUrl, globalConfig.userToken);
                 previewDiv.innerHTML = renderedHtml;
 
-bindInteractiveElements(previewDiv);
+                bindInteractiveElements(previewDiv);
             } else {
                 markdownShortcuts.classList.remove('hidden');
             }
