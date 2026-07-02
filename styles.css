@@ -310,7 +310,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .block-btn {
     position: absolute;
     top: 5px;
-    left: -50px;
+    right: -50px;
+    left: auto;
     background: #ef4444;
     color: #fff;
     padding: 4px 8px;
@@ -325,9 +326,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 }
 .block-btn.show {
     display: block;
-    animation: fadeIn 0.2s ease;
+    animation: fadeInRight 0.2s ease;
 }
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateX(10px); }
+@keyframes fadeInRight {
+    from { opacity: 0; transform: translateX(-10px); }
     to { opacity: 1; transform: translateX(0); }
 }
