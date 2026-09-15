@@ -1,4 +1,7 @@
-marked.setOptions({breaks: true, gfm: true});
+marked.setOptions({
+    breaks: true,
+    gfm: true
+});
 
 let pressTimer = null;
 let avatarPressTimer = null;
@@ -9,6 +12,7 @@ let hasMoved = false;
 
 const MOVE_THRESHOLD = 15;
 const PRESS_DURATION = 500;
+
 const bookCache = new Map();
 
 let globalConfig = {};
@@ -16,231 +20,1048 @@ let currentUserId = null;
 let cachedComments = [];
 let currentSort = 'default';
 
-const ICONS = {
-    helpful: {
-        outline: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>`,
-        filled: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path></svg>`
+let currentInputMode = null;
+let currentCommentId = null;
+let currentReplyToName = null;
+
+let renderVersion = 0;
+let reviewVersion = 0;
+let previewVersion = 0;
+let uiInitialized = false;
+let avatarDismissBound = false;
+
+const BADGE_OPTIONS = {
+    baseFontSize: 14,
+
+    comment: {
+        maxHeight: 21,
+        maxWidth: 142.5
     },
-    not_helpful: {
-        outline: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg>`,
-        filled: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path></svg>`
+
+    reply: {
+        maxHeight: 16.5,
+        maxWidth: 112.5
     }
 };
 
-const formatNumber = n => n >= 1e4 ? (n / 1e4).toFixed(1) + '万' : n.toLocaleString();
+const ICONS = {
+    helpful: {
+        outline: `
+            <svg viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-linecap="round"
+                 stroke-linejoin="round">
+                <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+            </svg>
+        `,
+        filled: `
+            <svg viewBox="0 0 24 24"
+                 fill="currentColor"
+                 stroke="currentColor"
+                 stroke-linecap="round"
+                 stroke-linejoin="round">
+                <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+            </svg>
+        `
+    },
+
+    not_helpful: {
+        outline: `
+            <svg viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-linecap="round"
+                 stroke-linejoin="round">
+                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path>
+            </svg>
+        `,
+        filled: `
+            <svg viewBox="0 0 24 24"
+                 fill="currentColor"
+                 stroke="currentColor"
+                 stroke-linecap="round"
+                 stroke-linejoin="round">
+                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path>
+            </svg>
+        `
+    }
+};
+
+function escapeHTML(value) {
+    return String(value ? ? '').replace(/[&<>"']/g, char => ({
+        '&': '&',
+        '<': '<',
+        '>': '>',
+        '"': '"',
+        "'": '''
+    } [char]));
+}
+
+function formatNumber(value) {
+    const number = Number(value) || 0;
+
+    return number >= 1e4 ?
+        (number / 1e4).toFixed(1) + '万' :
+        number.toLocaleString();
+}
+
+function makeId(prefix) {
+    return (
+        prefix + '_' +
+        Date.now().toString(36) + '_' +
+        Math.random().toString(36).slice(2, 10)
+    );
+}
+
+function safeImageUrl(value, baseUrl = globalConfig.baseUrl) {
+    if (!value) return '';
+
+    try {
+        const base = baseUrl ?
+            String(baseUrl).replace(/\/+$/, '') + '/' :
+            document.baseURI;
+
+        const url = new URL(String(value), base);
+
+        if (url.protocol === 'https:' || url.protocol === 'http:') {
+            return url.href;
+        }
+    } catch {}
+
+    return '';
+}
 
 function createAuthHeaders(userToken) {
     const headers = {};
+
     if (userToken) {
-        headers['Authorization'] = userToken;
+        headers.Authorization = userToken;
     }
+
     return headers;
 }
 
 function parseUserToken(userToken) {
     if (!userToken) return null;
+
     try {
-        const token = userToken.trim().replace(/^Bearer\s+/, '');
+        const token = String(userToken)
+            .trim()
+            .replace(/^Bearer\s+/i, '');
+
         const parts = token.split('.');
         if (parts.length < 2) return null;
-        const payload = JSON.parse(atob(parts[1]));
-        return payload.sub || null;
-    } catch (e) {
-        console.error('解析token失败:', e);
+
+        let payload = parts[1]
+            .replace(/-/g, '+')
+            .replace(/_/g, '/');
+
+        payload = payload.padEnd(
+            Math.ceil(payload.length / 4) * 4,
+            '='
+        );
+
+        const binary = atob(payload);
+        const bytes = Uint8Array.from(
+            binary,
+            char => char.charCodeAt(0)
+        );
+
+        const data = JSON.parse(
+            new TextDecoder().decode(bytes)
+        );
+
+        return data.sub == null ? null : String(data.sub);
+    } catch (error) {
+        console.error('解析 token 失败:', error);
         return null;
     }
 }
 
+async function requestJSON(url, options = {}) {
+    const response = await fetch(url, options);
+
+    let result;
+
+    try {
+        result = await response.json();
+    } catch {
+        throw new Error(`服务器返回格式错误（HTTP ${response.status}）`);
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            result.message ||
+            result.error ||
+            `请求失败（HTTP ${response.status}）`
+        );
+    }
+
+    return result;
+}
+
 function showToast(message, type = 'info', duration = 3000) {
-    const toastContainer = document.getElementById('toastContainer');
-    if (!toastContainer) {
+    const container = document.getElementById('toastContainer');
+
+    if (!container) {
         alert(message);
         return;
     }
 
+    const safeType = ['success', 'error', 'info'].includes(type) ?
+        type :
+        'info';
+
     const toast = document.createElement('div');
-    toast.classList.add('toast-message', type);
+    toast.className = `toast-message ${safeType}`;
 
-    let icon = '';
-    if (type === 'success') icon = '✅';
-    else if (type === 'error') icon = '❎';
-    else icon = 'ℹ️';
+    const icon = document.createElement('span');
+    icon.className = 'toast-icon';
+    icon.textContent = safeType === 'success' ?
+        '✅' :
+        safeType === 'error' ?
+        '❎' :
+        'ℹ️';
 
-    toast.innerHTML = `<span class="toast-icon">${icon}</span><span>${message}</span>`;
+    const text = document.createElement('span');
+    text.textContent = String(message);
 
-    toastContainer.appendChild(toast);
+    toast.append(icon, text);
+    container.appendChild(toast);
 
-    void toast.offsetWidth; 
+    void toast.offsetWidth;
     toast.classList.add('show');
 
     setTimeout(() => {
         toast.classList.remove('show');
-        toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+
+        toast.addEventListener(
+            'transitionend',
+            () => toast.remove(), {
+                once: true
+            }
+        );
+        setTimeout(() => toast.remove(), 500);
     }, duration);
 }
 
-async function blockUser(userId, btnElement) {
-    if (!confirm('确定要屏蔽该用户吗？屏蔽后将无法看到其后续发言。')) return;
-    
-    try {
-        const headers = createAuthHeaders(globalConfig.userToken);
-        headers['Content-Type'] = 'application/json';
-        
-        const response = await fetch(`${globalConfig.baseUrl}/api/v2/users/${userId}/block`, {
-            method: 'POST',
-            headers: headers
+function refreshReview() {
+    return getReview(
+        globalConfig.baseUrl,
+        globalConfig.bookName,
+        globalConfig.chapterName,
+        globalConfig.bookId,
+        globalConfig.chapterId,
+        globalConfig.detailUrl,
+        globalConfig.coverUrl,
+        globalConfig.userToken
+    );
+}
+
+class SourceBadge extends HTMLElement {
+    constructor() {
+        super();
+
+        this.attachShadow({
+            mode: 'open'
         });
 
-        if (response.ok) {
-            showToast('屏蔽成功', 'success');
-            btnElement.classList.remove('show');
-            await getReview(globalConfig.baseUrl, globalConfig.bookName, globalConfig.chapterName, globalConfig.bookId, globalConfig.chapterId, globalConfig.detailUrl, globalConfig.coverUrl, globalConfig.userToken);
-        } else {
-            throw new Error('请求失败');
+        this._built = false;
+        this._frame = 0;
+        this._observer = null;
+        this._mutationObserver = null;
+        this._fallbackTimer = null;
+
+        this._scheduleBound = () => this.scheduleFit();
+    }
+
+    connectedCallback() {
+        if (!this._built) {
+            this._built = true;
+            this.build();
         }
+
+        this.startObservers();
+        this.scheduleFit();
+
+        if (document.fonts) {
+            document.fonts.ready.then(() => {
+                if (this.isConnected) {
+                    this.scheduleFit();
+                }
+            });
+
+            if (document.fonts.addEventListener) {
+                document.fonts.addEventListener(
+                    'loadingdone',
+                    this._scheduleBound
+                );
+            }
+        }
+
+        window.addEventListener(
+            'resize',
+            this._scheduleBound, {
+                passive: true
+            }
+        );
+    }
+
+    disconnectedCallback() {
+        this._observer?.disconnect();
+        this._mutationObserver?.disconnect();
+
+        clearInterval(this._fallbackTimer);
+        this._fallbackTimer = null;
+
+        cancelAnimationFrame(this._frame);
+        this._frame = 0;
+
+        window.removeEventListener(
+            'resize',
+            this._scheduleBound
+        );
+
+        if (document.fonts?.removeEventListener) {
+            document.fonts.removeEventListener(
+                'loadingdone',
+                this._scheduleBound
+            );
+        }
+    }
+
+    build() {
+        let badge = {};
+
+        try {
+            badge = JSON.parse(
+                this.getAttribute('data-badge') || '{}'
+            );
+        } catch {}
+
+        const name = String(badge.name || '');
+
+        this.title = String(
+            badge.description || badge.name || ''
+        );
+
+        this.setAttribute('aria-label', name);
+
+        const layoutStyle = document.createElement('style');
+        layoutStyle.textContent = `
+            :host {
+                display: inline-block;
+                position: relative;
+                flex: 0 0 auto;
+                vertical-align: middle;
+                line-height: 0;
+            }
+
+            .viewport {
+                position: relative;
+                display: block;
+                width: 0;
+                height: 0;
+                overflow: visible;
+            }
+
+            .scaler {
+                position: absolute;
+                top: 0;
+                left: 0;
+                display: block;
+                width: max-content;
+                transform-origin: left top;
+                line-height: normal;
+            }
+
+            .source {
+                display: flow-root;
+                width: max-content;
+            }
+        `;
+
+        this._viewport = document.createElement('div');
+        this._viewport.className = 'viewport';
+
+        this._scaler = document.createElement('div');
+        this._scaler.className = 'scaler';
+
+        this._source = document.createElement('span');
+        this._source.className = 'source';
+
+        this._sourceRoot = this._source.attachShadow({
+            mode: 'open'
+        });
+
+        const baseStyle = document.createElement('style');
+        baseStyle.textContent = `
+            :host {
+                font-family:
+                    -apple-system,
+                    BlinkMacSystemFont,
+                    "Segoe UI",
+                    Roboto,
+                    sans-serif;
+                font-size: ${BADGE_OPTIONS.baseFontSize}px;
+                line-height: 1.4;
+                color: #fff;
+            }
+
+            .badge {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                box-sizing: border-box;
+                padding: 3px 10px;
+                border-radius: 9999px;
+                background: #94a3b8;
+                color: #fff;
+                font-size: inherit;
+                font-weight: 600;
+                line-height: 1.4;
+                white-space: nowrap;
+                vertical-align: middle;
+            }
+
+            .badge__text {
+                position: relative;
+                z-index: 1;
+            }
+
+            .badge-image {
+                display: block;
+                width: auto;
+                height: auto;
+                max-width: none;
+                border: 0;
+            }
+        `;
+
+        const sourceStyle = document.createElement('style');
+
+        const customCSS = typeof badge.badge_css === 'string' ?
+            badge.badge_css :
+            '';
+        sourceStyle.textContent = customCSS;
+
+        this._sourceRoot.append(
+            baseStyle,
+            sourceStyle
+        );
+
+        const customHTML = typeof badge.badge_html === 'string' ?
+            badge.badge_html.trim() :
+            '';
+
+        const imageUrl = safeImageUrl(
+            badge.image_url,
+            badge.base_url
+        );
+
+        if (customHTML && window.DOMPurify) {
+            const fragment = DOMPurify.sanitize(customHTML, {
+                RETURN_DOM_FRAGMENT: true,
+
+                USE_PROFILES: {
+                    html: true,
+                    svg: true,
+                    svgFilters: true
+                },
+
+                FORBID_TAGS: [
+                    'script',
+                    'style',
+                    'iframe',
+                    'object',
+                    'embed',
+                    'link',
+                    'meta',
+                    'base'
+                ]
+            });
+
+            if (fragment.childNodes.length > 0) {
+                this._sourceRoot.appendChild(fragment);
+            } else {
+                this.appendDefaultBadge(name);
+            }
+        } else if (
+            !customHTML &&
+            !customCSS.trim() &&
+            imageUrl
+        ) {
+            const image = document.createElement('img');
+            image.className = 'badge-image';
+            image.src = imageUrl;
+            image.alt = name;
+            image.decoding = 'async';
+
+            this._sourceRoot.appendChild(image);
+        } else {
+            this.appendDefaultBadge(name);
+        }
+
+        this._sourceRoot.querySelectorAll('img').forEach(image => {
+            image.addEventListener(
+                'load',
+                this._scheduleBound
+            );
+
+            image.addEventListener(
+                'error',
+                this._scheduleBound
+            );
+        });
+
+        this._scaler.appendChild(this._source);
+        this._viewport.appendChild(this._scaler);
+
+        this.shadowRoot.append(
+            layoutStyle,
+            this._viewport
+        );
+    }
+
+    appendDefaultBadge(name) {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+
+        const text = document.createElement('span');
+        text.className = 'badge__text';
+        text.textContent = name;
+
+        badge.appendChild(text);
+        this._sourceRoot.appendChild(badge);
+    }
+
+    startObservers() {
+        this._observer?.disconnect();
+        this._mutationObserver?.disconnect();
+
+        if ('ResizeObserver' in window) {
+            this._observer = new ResizeObserver(
+                this._scheduleBound
+            );
+
+            this._observer.observe(this._source);
+
+            if (this.parentElement) {
+                this._observer.observe(this.parentElement);
+            }
+        } else {
+            clearInterval(this._fallbackTimer);
+
+            this._fallbackTimer = setInterval(
+                this._scheduleBound,
+                1000
+            );
+        }
+        this._mutationObserver = new MutationObserver(
+            this._scheduleBound
+        );
+
+        let parent = this.parentElement;
+
+        while (parent && parent !== document.body) {
+            this._mutationObserver.observe(parent, {
+                attributes: true,
+                attributeFilter: ['class', 'style', 'hidden']
+            });
+
+            parent = parent.parentElement;
+        }
+    }
+
+    scheduleFit() {
+        if (!this.isConnected || this._frame) {
+            return;
+        }
+
+        this._frame = requestAnimationFrame(() => {
+            this._frame = 0;
+            this.fit();
+        });
+    }
+
+    fit() {
+        if (!this._source) return;
+        const width = Math.max(
+            this._source.offsetWidth,
+            this._source.scrollWidth
+        );
+
+        const height = Math.max(
+            this._source.offsetHeight,
+            this._source.scrollHeight
+        );
+
+        if (!width || !height) {
+            return;
+        }
+
+        const options = this.getAttribute('size') === 'reply' ?
+            BADGE_OPTIONS.reply :
+            BADGE_OPTIONS.comment;
+
+        let availableWidth = options.maxWidth;
+        const parent = this.parentElement;
+
+        if (parent && parent.clientWidth > 0) {
+            const style = getComputedStyle(parent);
+
+            availableWidth = parent.clientWidth -
+                (parseFloat(style.paddingLeft) || 0) -
+                (parseFloat(style.paddingRight) || 0);
+        }
+
+        const maxWidth = Math.max(
+            1,
+            Math.min(options.maxWidth, availableWidth)
+        );
+
+        const scale = Math.min(
+            1,
+            options.maxHeight / height,
+            maxWidth / width
+        );
+        this._scaler.style.transform = `scale(${scale})`;
+
+        const displayWidth = `${width * scale}px`;
+        const displayHeight = `${height * scale}px`;
+
+        if (this._viewport.style.width !== displayWidth) {
+            this._viewport.style.width = displayWidth;
+        }
+
+        if (this._viewport.style.height !== displayHeight) {
+            this._viewport.style.height = displayHeight;
+        }
+    }
+}
+
+if (!customElements.get('source-badge')) {
+    customElements.define('source-badge', SourceBadge);
+}
+
+function renderSourceBadge(badge, isReply) {
+    const data = {
+        name: badge.name || '',
+        description: badge.description || '',
+        image_url: badge.image_url || '',
+        badge_html: badge.badge_html || '',
+        badge_css: badge.badge_css || '',
+        base_url: globalConfig.baseUrl || ''
+    };
+
+    return `
+        <source-badge
+            size="${isReply ? 'reply' : 'comment'}"
+            data-badge="${escapeHTML(JSON.stringify(data))}"
+        ></source-badge>
+    `;
+}
+
+async function blockUser(userId, btnElement) {
+    if (!globalConfig.userToken) {
+        showToast('请先登录', 'error');
+        return;
+    }
+
+    if (!confirm(
+            '确定要屏蔽该用户吗？屏蔽后将无法看到其后续发言。'
+        )) {
+        return;
+    }
+
+    try {
+        const headers = createAuthHeaders(
+            globalConfig.userToken
+        );
+
+        headers['Content-Type'] = 'application/json';
+
+        const response = await fetch(
+            `${globalConfig.baseUrl}/api/v2/users/${
+                encodeURIComponent(userId)
+            }/block`, {
+                method: 'POST',
+                headers
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(`请求失败（HTTP ${response.status}）`);
+        }
+
+        showToast('屏蔽成功', 'success');
+        btnElement?.classList.remove('show');
+
+        await refreshReview();
     } catch (error) {
         showToast('屏蔽失败: ' + error.message, 'error');
     }
 }
 
 function initAvatarLongPress(container) {
-    document.addEventListener('click', (e) => {
-        if (!e.target.classList.contains('block-btn')) {
-            document.querySelectorAll('.block-btn.show').forEach(b => b.classList.remove('show'));
-        }
-    });
+    if (!avatarDismissBound) {
+        avatarDismissBound = true;
 
-    container.querySelectorAll('.user-avatar-container, .reply-avatar-container').forEach(avatar => {
-        const blockBtn = avatar.querySelector('.block-btn');
-        if (!blockBtn) return;
-
-        avatar.addEventListener('touchstart', (e) => {
-            avatarPressTimer = setTimeout(() => {
-                document.querySelectorAll('.block-btn.show').forEach(b => b.classList.remove('show'));
-                blockBtn.classList.add('show');
-            }, 600);
-        }, {passive: true});
-
-        const clearTimer = () => clearTimeout(avatarPressTimer);
-        avatar.addEventListener('touchend', clearTimer);
-        avatar.addEventListener('touchmove', clearTimer);
-        avatar.addEventListener('mousedown', clearTimer);
-    });
-}
-
-async function processBookTags(text, baseUrl, userToken) {
-    const regex = /\[bookid:(\d+)(?:\s*\|\s*([a-z,]+))?\]/g;
-    let lastIndex = 0;
-    let result = '';
-    let match;
-
-    while (match = regex.exec(text)) {
-        result += text.slice(lastIndex, match.index);
-        const bookId = match[1];
-        const options = match[2] ? match[2].toLowerCase().split(',').map(t => t.trim()) : [];
-        const showTags = options.includes('tag');
-        const showBio = options.includes('bio');
-        const cardId = `book-card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-        result += `<div id="${cardId}"></div>`;
-
-        setTimeout(() => loadBookCard(bookId, cardId, baseUrl, showTags, showBio, userToken), 0);
-        lastIndex = regex.lastIndex;
+        document.addEventListener('click', event => {
+            if (!event.target.closest('.block-btn')) {
+                document.querySelectorAll('.block-btn.show')
+                    .forEach(button => {
+                        button.classList.remove('show');
+                    });
+            }
+        });
     }
 
-    result += text.slice(lastIndex);
-    return result;
+    container.querySelectorAll(
+        '.user-avatar-container, .reply-avatar-container'
+    ).forEach(avatar => {
+        if (avatar.dataset.longPressBound) return;
+        avatar.dataset.longPressBound = '1';
+
+        const blockButton = avatar.querySelector('.block-btn');
+        if (!blockButton) return;
+
+        const clearTimer = () => {
+            clearTimeout(avatarPressTimer);
+            avatarPressTimer = null;
+        };
+
+        const startTimer = () => {
+            clearTimer();
+
+            avatarPressTimer = setTimeout(() => {
+                document.querySelectorAll('.block-btn.show')
+                    .forEach(button => {
+                        button.classList.remove('show');
+                    });
+
+                blockButton.classList.add('show');
+            }, 600);
+        };
+
+        avatar.addEventListener(
+            'touchstart',
+            startTimer, {
+                passive: true
+            }
+        );
+
+        avatar.addEventListener('touchend', clearTimer);
+        avatar.addEventListener('touchcancel', clearTimer);
+        avatar.addEventListener('touchmove', clearTimer);
+
+        avatar.addEventListener('mousedown', event => {
+            if (event.button === 0) startTimer();
+        });
+
+        avatar.addEventListener('mouseup', clearTimer);
+        avatar.addEventListener('mouseleave', clearTimer);
+    });
 }
 
-async function loadBookCard(bookId, elementId, baseUrl, showTags, showBio, userToken) {
-    const element = document.getElementById(elementId);
+async function processBookTags(text) {
+    const regex = /\[bookid:(\d+)(?:\s*\|\s*([a-z,\s]+))?\]/gi;
+
+    return String(text).replace(
+        regex,
+        (match, bookId, optionText = '') => {
+            const options = optionText
+                .toLowerCase()
+                .split(',')
+                .map(value => value.trim());
+
+            return `
+<div
+    class="book-card-placeholder"
+    data-book-id="${bookId}"
+    data-show-tags="${options.includes('tag') ? '1' : '0'}"
+    data-show-bio="${options.includes('bio') ? '1' : '0'}"
+><div class="book-loading">加载书籍信息...</div></div>
+`;
+        }
+    );
+}
+
+function hydrateBookCards(container) {
+    container.querySelectorAll(
+        '.book-card-placeholder[data-book-id]'
+    ).forEach(element => {
+        if (element.dataset.bookLoaded) return;
+        element.dataset.bookLoaded = '1';
+
+        loadBookCard(
+            element.dataset.bookId,
+            element,
+            globalConfig.baseUrl,
+            element.dataset.showTags === '1',
+            element.dataset.showBio === '1',
+            globalConfig.userToken
+        );
+    });
+}
+
+async function loadBookCard(
+    bookId,
+    element,
+    baseUrl,
+    showTags,
+    showBio,
+    userToken
+) {
     if (!element) return;
 
-    element.innerHTML = '<div class="book-loading">加载书籍信息...</div>';
+    element.innerHTML =
+        '<div class="book-loading">加载书籍信息...</div>';
+
+    const cacheKey = `${baseUrl}|${bookId}`;
 
     try {
-        if (bookCache.has(bookId)) {
-            return renderBookCard(element, bookCache.get(bookId), showTags, showBio, baseUrl, bookId);
+        let data;
+
+        if (bookCache.has(cacheKey)) {
+            data = await bookCache.get(cacheKey);
+        } else {
+            const promise = requestJSON(
+                `${baseUrl}/api/novel/detail.php?id=${
+                    encodeURIComponent(bookId)
+                }`, {
+                    headers: createAuthHeaders(userToken)
+                }
+            ).then(result => {
+                if (!result.success || !result.id) {
+                    throw new Error('数据错误');
+                }
+
+                return result;
+            });
+
+            bookCache.set(cacheKey, promise);
+
+            try {
+                data = await promise;
+                bookCache.set(cacheKey, data);
+            } catch (error) {
+                bookCache.delete(cacheKey);
+                throw error;
+            }
         }
 
-        const headers = createAuthHeaders(userToken);
-        const response = await fetch(`${baseUrl}/api/novel/detail.php?id=${bookId}`, { headers });
-        const data = await response.json();
+        if (!element.isConnected) return;
 
-        if (!response.ok || !data.success || !data.id) {
-            throw new Error('数据错误');
-        }
+        renderBookCard(
+            element,
+            data,
+            showTags,
+            showBio,
+            baseUrl,
+            bookId
+        );
+    } catch {
+        if (!element.isConnected) return;
 
-        bookCache.set(bookId, data);
-        renderBookCard(element, data, showTags, showBio, baseUrl, bookId);
-    } catch (error) {
-        element.innerHTML = `<div class="book-error">加载书籍信息失败<div style="font-size:11px;margin-top:4px">ID: ${bookId}</div></div>`;
+        element.innerHTML = `
+            <div class="book-error">
+                加载书籍信息失败
+                <div style="font-size:11px;margin-top:4px">
+                    ID: ${escapeHTML(bookId)}
+                </div>
+            </div>
+        `;
     }
 }
 
-function renderBookCard(element, bookData, showTags, showBio, baseUrl, bookId) {
-    const {title, photoUrl, authorName, sourceFavoriteCount, novelRead, tags, description} = bookData;
-    const hasTags = showTags && tags && tags.length > 0;
-    const hasBio = showBio && description && description.trim().length > 0;
+function renderBookCard(
+    element,
+    bookData,
+    showTags,
+    showBio,
+    baseUrl,
+    bookId
+) {
+    const title = String(bookData.title || '未知书籍');
+    const authorName = String(bookData.authorName || '未知');
+    const description = String(bookData.description || '');
+
+    const tags = Array.isArray(bookData.tags) ?
+        bookData.tags :
+        [];
+
+    const hasTags = showTags && tags.length > 0;
+    const hasBio = showBio && description.trim().length > 0;
+
+    const photoUrl = safeImageUrl(
+        bookData.photoUrl,
+        baseUrl
+    );
 
     const cardLink = document.createElement('a');
-    cardLink.href = `legado://import/addToBookshelf?src=${baseUrl}/book/${bookId},{"origin":"汉化论坛Top"}`;
-    cardLink.style.cssText = 'text-decoration:none;color:inherit;display:block';
+
+    cardLink.href =
+        `legado://import/addToBookshelf?src=${
+            baseUrl
+        }/book/${bookId},{"origin":"汉化论坛Top"}`;
+
+    cardLink.style.cssText =
+        'text-decoration:none;color:inherit;display:block';
+
     cardLink.innerHTML = `
         <div class="book-card">
             <div class="book-card-header">
                 <div class="book-cover">
-                    <img src="${photoUrl}" alt="${title}" loading="lazy" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA2MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjZjFmNWY5Ii8+Cjx0ZXh0IHg9IjMwIiB5PSI0MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5NDBhM2I4Ij5Db3ZlcjwvdGV4dD4KPC9zdmc+'">
+                    <img
+                        ${photoUrl ? `src="${escapeHTML(photoUrl)}"` : ''}
+                        alt="${escapeHTML(title)}"
+                        loading="lazy"
+                    >
                 </div>
+
                 <div class="book-info">
-                    <div class="book-title" title="${title}">${title}</div>
-                    <div class="book-author">作者:${authorName}</div>
+                    <div
+                        class="book-title"
+                        title="${escapeHTML(title)}"
+                    >${escapeHTML(title)}</div>
+
+                    <div class="book-author">
+                        作者:${escapeHTML(authorName)}
+                    </div>
+
                     <div class="book-stats">
-                        <div class="book-stat-item"><span>⭐</span><span>${formatNumber(sourceFavoriteCount)}</span></div>
-                        <div class="book-stat-item"><span>👁️</span><span>${formatNumber(novelRead)}</span></div>
+                        <div class="book-stat-item">
+                            <span>⭐</span>
+                            <span>${
+                                formatNumber(bookData.sourceFavoriteCount)
+                            }</span>
+                        </div>
+
+                        <div class="book-stat-item">
+                            <span>👁️</span>
+                            <span>${
+                                formatNumber(bookData.novelRead)
+                            }</span>
+                        </div>
                     </div>
                 </div>
             </div>
+
             ${hasTags ? `
-            <div class="book-tags-section show">
-                <div class="book-tags">${tags.map(tag => `<span class="book-tag">${tag}</span>`).join('')}</div>
-            </div>` : ''}
+                <div class="book-tags-section show">
+                    <div class="book-tags">
+                        ${tags.map(tag => `
+                            <span class="book-tag">${
+                                escapeHTML(
+                                    typeof tag === 'string'
+                                        ? tag
+                                        : tag.name || ''
+                                )
+                            }</span>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
             ${hasBio ? `
-            <div class="book-description show">
-                <div class="book-description-content" title="${description}">${description.replace(/\n/g, '<br>')}</div>
-            </div>` : ''}
+                <div class="book-description show">
+                    <div
+                        class="book-description-content"
+                        title="${escapeHTML(description)}"
+                    >${
+                        escapeHTML(description).replace(/\n/g, '<br>')
+                    }</div>
+                </div>
+            ` : ''}
         </div>
     `;
 
-    element.innerHTML = '';
-    element.appendChild(cardLink);
+    const image = cardLink.querySelector('.book-cover img');
+
+    const setFallback = () => {
+        const svg = `
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 width="60" height="80">
+                <rect width="60" height="80" fill="#f1f5f9"/>
+                <text
+                    x="30"
+                    y="42"
+                    text-anchor="middle"
+                    font-family="sans-serif"
+                    font-size="12"
+                    fill="#94a3b8"
+                >Cover</text>
+            </svg>
+        `;
+
+        image.src =
+            'data:image/svg+xml;charset=utf-8,' +
+            encodeURIComponent(svg);
+    };
+
+    image.addEventListener('error', setFallback, {
+        once: true
+    });
+
+    if (!photoUrl) {
+        setFallback();
+    }
+
+    element.replaceChildren(cardLink);
 }
 
 function processSpoiler(text) {
-    return text.replace(/\|\|([^\|]+)\|\|/g, (match, content) => {
-        return `<span class="spoiler" data-spoiler="true">${content}</span>`;
-    });
+    return text.replace(
+        /\|\|([^|]+)\|\|/g,
+        (match, content) => {
+            return (
+                '<span class="spoiler" data-spoiler="true">' +
+                content +
+                '</span>'
+            );
+        }
+    );
 }
 
 async function processFoldTags(text, baseUrl, userToken) {
     const regex = /\[fold:([^\]]+)\]([\s\S]*?)\[\/fold\]/g;
+
     let lastIndex = 0;
-    let resultParts = [];
+    const resultParts = [];
     let match;
 
-    while (match = regex.exec(text)) {
-        resultParts.push('\n\n' + text.slice(lastIndex, match.index));
+    while ((match = regex.exec(text))) {
+        resultParts.push(
+            '\n\n' + text.slice(lastIndex, match.index)
+        );
 
         const title = match[1];
         const content = match[2];
-        const foldId = 'fold_' + Math.random().toString(36).substr(2, 9);
+        const foldId = makeId('fold');
 
-        const renderedContent = await renderMarkdown(content.trim(), baseUrl, userToken);
+        const renderedContent = await renderMarkdown(
+            content.trim(),
+            baseUrl,
+            userToken
+        );
 
-        resultParts.push(`\n\n<div class="fold-container">
-            <div class="fold-header" data-fold="${foldId}">${title}</div>
-            <div class="fold-content" id="${foldId}">${renderedContent}</div>
-        </div>\n\n`);
+        resultParts.push(`
+<div class="fold-container">
+    <div
+        class="fold-header"
+        data-fold="${foldId}"
+        role="button"
+        tabindex="0"
+        aria-expanded="false"
+    >${escapeHTML(title)}</div>
+    <div class="fold-content" id="${foldId}">
+        ${renderedContent}
+    </div>
+</div>
+`);
 
         lastIndex = regex.lastIndex;
     }
@@ -250,312 +1071,566 @@ async function processFoldTags(text, baseUrl, userToken) {
 }
 
 async function renderMarkdown(text, baseUrl, userToken) {
-    const processedBookTagsText = await processBookTags(text, baseUrl, userToken);
-    const processedFoldText = await processFoldTags(processedBookTagsText, baseUrl, userToken);
-    const processedSpoilerText = processSpoiler(processedFoldText);
-    return marked.parse(processedSpoilerText);
-}
+    const input = String(text ? ? '');
 
-function extractBadgeBackground(badgeCss) {
-    if (!badgeCss) return null;
-    const blockMatch = badgeCss.match(/\.badge\s*\{([^}]*)\}/);
-    if (!blockMatch) return null;
-    const block = blockMatch[1];
+    const withBooks = await processBookTags(input);
+    const withFolds = await processFoldTags(
+        withBooks,
+        baseUrl,
+        userToken
+    );
 
-    const bgImageMatch = block.match(/background-image\s*:\s*([^;]+)/);
-    if (bgImageMatch) {
-        const bgImage = bgImageMatch[1].trim();
-        const bgSizeMatch = block.match(/background-size\s*:\s*([^;]+)/);
-        const bgPosMatch  = block.match(/background-position\s*:\s*([^;]+)/);
-        let style = `background-image:${bgImage};background-repeat:no-repeat;`;
-        if (bgSizeMatch) style += `background-size:${bgSizeMatch[1].trim()};`;
-        if (bgPosMatch)  style += `background-position:${bgPosMatch[1].trim()};`;
-        return style;
+    const withSpoilers = processSpoiler(withFolds);
+    const html = marked.parse(withSpoilers);
+
+    if (!window.DOMPurify) {
+        return escapeHTML(input).replace(/\n/g, '<br>');
     }
 
-    const bgMatch = block.match(/(?<![a-z-])background\s*:\s*([^;]+)/);
-    if (bgMatch) return `background:${bgMatch[1].trim()};`;
+    return DOMPurify.sanitize(html, {
+        USE_PROFILES: {
+            html: true
+        },
 
-    const bgColorMatch = block.match(/background-color\s*:\s*([^;]+)/);
-    if (bgColorMatch) return `background-color:${bgColorMatch[1].trim()};`;
+        FORBID_TAGS: [
+            'style',
+            'script',
+            'iframe',
+            'object',
+            'embed',
+            'link',
+            'meta',
+            'base'
+        ],
+        FORBID_ATTR: ['style'],
 
-    return null;
-}
-
-function extractBadgeImageUrl(badgeCss) {
-    if (!badgeCss) return null;
-    const blockMatch = badgeCss.match(/\.badge\s*\{([\s\S]*?)\}/);
-    if (!blockMatch) return null;
-    const block = blockMatch[1];
-    const urlMatch = block.match(/background-image:\s*url\('(.*?)'\);/);
-    if (urlMatch) return urlMatch[1].trim();
-
-    return null;
+        ALLOW_DATA_ATTR: true
+    });
 }
 
 async function getComment(comments, baseUrl, userToken) {
-
-    if (!comments || comments.length === 0) {
-        return '<div class="no-comments"><div class="no-comments-icon">💬</div><div class="no-comments-text">暂无评论</div></div>';
+    if (!Array.isArray(comments) || comments.length === 0) {
+        return `
+            <div class="no-comments">
+                <div class="no-comments-icon">💬</div>
+                <div class="no-comments-text">暂无评论</div>
+            </div>
+        `;
     }
 
-    async function renderComment(comment, isReply = false, depth = 0, userToken, rootId = null) {
-        const currentRootId = (depth === 0) ? comment.id : rootId;
+    async function renderComment(
+        comment,
+        isReply = false,
+        depth = 0,
+        rootId = null
+    ) {
+        const currentRootId = depth === 0 ?
+            comment.id :
+            rootId;
 
-        const initial = comment.authorName ? comment.authorName.charAt(0) : '?';
-        let avatarContent = '';
-        let avatarStyle = '';
-        let frameHtml = '';
-        let badgesHtml = '';
+        const authorName = String(
+            comment.authorName || '匿名用户'
+        );
 
-        // 新增：屏蔽按钮逻辑
-        const isOwnComment = currentUserId && comment.authorId === currentUserId;
-        let blockBtnHtml = '';
-        if (!isOwnComment && currentUserId) {
-            blockBtnHtml = `<button class="block-btn" onclick="event.stopPropagation(); blockUser('${comment.authorId}', this)">屏蔽</button>`;
-        }
+        const initial = Array.from(authorName)[0] || '?';
 
-        if (comment.authorAvatar) {
-            avatarContent = `<img src="${comment.authorAvatar}" alt="${comment.authorName}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
-            avatarStyle = ' style="background:none;overflow:hidden"';
-        } else {
-            avatarContent = initial;
-        }
+        const isOwnComment =
+            currentUserId !== null &&
+            String(comment.authorId) === String(currentUserId);
 
-        if (comment.authorAvatarFrame) {
-            const frameClass = isReply ? 'reply-avatar-frame' : 'avatar-frame';
-            frameHtml = `<img src="${comment.authorAvatarFrame}" class="${frameClass}" style="position:absolute;top:-25%;left:-25%;width:150%;height:150%;z-index:2;pointer-events:none;object-fit:contain;transform:scale(1.2)">`;
-        }
+        const avatarUrl = safeImageUrl(
+            comment.authorAvatar,
+            baseUrl
+        );
 
-        if (comment.authorBadges && comment.authorBadges.length > 0) {
-            const badgeItems = comment.authorBadges.map(badge => {
-                const imgUrl = extractBadgeImageUrl(badge.badge_css);
-                if (imgUrl) {
-                    return `<img src="${imgUrl}" class="${isReply ? 'reply-badge-item' : 'badge-item'} badge-image-item" alt="${badge.name}" title="${badge.name}" style="cursor:pointer;">`;
-                }
-                const bgStyle = extractBadgeBackground(badge.badge_css);
-                const styleAttr = bgStyle ? ` style="${bgStyle}"` : '';
-                return `<span class="${isReply ? 'reply-badge-item' : 'badge-item'}"${styleAttr}>${badge.name}</span>`;
-            }).join('');
-            badgesHtml = `<div class="${isReply ? 'reply-badges-section' : 'badges-section'}">
-                <div class="${isReply ? 'reply-badges-container' : 'badges-container'}">${badgeItems}</div>
-            </div>`;
-        }
+        const frameUrl = safeImageUrl(
+            comment.authorAvatarFrame,
+            baseUrl
+        );
 
-        const reactions = comment.userReactions || [];
-        const isHelpfulActive = reactions.includes('helpful');
-        const isNotHelpfulActive = reactions.includes('not_helpful');
+        const avatarClass = isReply ?
+            'reply-avatar' :
+            'user-avatar';
 
-        let statsHtml = `<div class="${isReply ? 'reply-stats' : 'comment-stats'}">
-            <span class="stat-item helpful ${isHelpfulActive ? 'active' : ''}" data-id="${comment.id}" data-type="helpful">
-                ${isHelpfulActive ? ICONS.helpful.filled : ICONS.helpful.outline}
-                <span class="count">${comment.helpfulCount}</span>
-            </span>
-            <span class="stat-item not-helpful ${isNotHelpfulActive ? 'active' : ''}" data-id="${comment.id}" data-type="not_helpful">
-                ${isNotHelpfulActive ? ICONS.not_helpful.filled : ICONS.not_helpful.outline}
-                <span class="count">${comment.notHelpfulCount}</span>
-            </span>
-        </div>`;
+        const avatarContainerClass = isReply ?
+            'reply-avatar-container' :
+            'user-avatar-container';
 
-        const contentHtml = await renderMarkdown(comment.content, baseUrl, userToken);
+        const infoClass = isReply ?
+            'reply-info' :
+            'user-info';
 
-        let replyToTagHtml = '';
-        if (isReply && comment.replyToName) {
-            replyToTagHtml = `<div class="reply-to-tag">@ ${comment.replyToName}</div>`;
-        }
+        const authorClass = isReply ?
+            'reply-author' :
+            'comment-author';
 
-        let actionsHtml = '';
-        if (isReply) {
-            actionsHtml = `<div class="reply-actions">
-                <div class="action-btns-group">
-                    <button class="action-btn reply-btn" data-comment-id="${currentRootId}" data-author-name="${comment.authorName}">💬 回复</button>
-                    ${isOwnComment ? `<button class="action-btn delete delete-reply-btn" data-reply-id="${comment.id}">🗑️ 删除</button>` : ''}
+        const timeClass = isReply ?
+            'reply-time' :
+            'comment-time';
+
+        const headerClass = isReply ?
+            'reply-header' :
+            'comment-header';
+
+        const avatarContent = avatarUrl ?
+            `
+                <img
+                    src="${escapeHTML(avatarUrl)}"
+                    alt="${escapeHTML(authorName)}"
+                >
+            ` :
+            escapeHTML(initial);
+
+        const frameHTML = frameUrl ?
+            `
+                <img
+                    src="${escapeHTML(frameUrl)}"
+                    class="${
+                        isReply ? 'reply-avatar-frame' : 'avatar-frame'
+                    }"
+                    alt=""
+                >
+            ` :
+            '';
+
+        const blockHTML = !isOwnComment && currentUserId !== null ?
+            `
+                <button
+                    class="block-btn"
+                    data-user-id="${escapeHTML(comment.authorId)}"
+                    type="button"
+                >屏蔽</button>
+            ` :
+            '';
+
+        let badgesHTML = '';
+
+        if (
+            Array.isArray(comment.authorBadges) &&
+            comment.authorBadges.length > 0
+        ) {
+            const badgeItems = comment.authorBadges
+                .filter(badge => badge && typeof badge === 'object')
+                .map(badge => renderSourceBadge(badge, isReply))
+                .join('');
+
+            badgesHTML = `
+                <div class="${
+                    isReply
+                        ? 'reply-badges-section'
+                        : 'badges-section'
+                }">
+                    <div class="${
+                        isReply
+                            ? 'reply-badges-container'
+                            : 'badges-container'
+                    }">
+                        ${badgeItems}
+                    </div>
                 </div>
-                ${statsHtml}
-            </div>`;
-        } else {
-            actionsHtml = `<div class="comment-actions">
-                <div class="action-btns-group">
-                    <button class="action-btn reply-btn" data-comment-id="${currentRootId}" data-author-name="${comment.authorName}">💬 回复</button>
-                    ${isOwnComment ? `<button class="action-btn delete delete-comment-btn" data-comment-id="${comment.id}">🗑️ 删除</button>` : ''}
-                </div>
-                ${statsHtml}
-            </div>`;
+            `;
         }
 
-        let repliesHtml = '';
-        const replies = comment.replies || [];
+        const reactions = Array.isArray(comment.userReactions) ?
+            comment.userReactions :
+            [];
+
+        const helpfulActive = reactions.includes('helpful');
+        const notHelpfulActive = reactions.includes('not_helpful');
+
+        const statsHTML = `
+            <div class="${isReply ? 'reply-stats' : 'comment-stats'}">
+                <span
+                    class="stat-item helpful ${
+                        helpfulActive ? 'active' : ''
+                    }"
+                    data-id="${escapeHTML(comment.id)}"
+                    data-type="helpful"
+                    role="button"
+                    tabindex="0"
+                >
+                    ${
+                        helpfulActive
+                            ? ICONS.helpful.filled
+                            : ICONS.helpful.outline
+                    }
+                    <span class="count">${
+                        Number(comment.helpfulCount) || 0
+                    }</span>
+                </span>
+
+                <span
+                    class="stat-item not-helpful ${
+                        notHelpfulActive ? 'active' : ''
+                    }"
+                    data-id="${escapeHTML(comment.id)}"
+                    data-type="not_helpful"
+                    role="button"
+                    tabindex="0"
+                >
+                    ${
+                        notHelpfulActive
+                            ? ICONS.not_helpful.filled
+                            : ICONS.not_helpful.outline
+                    }
+                    <span class="count">${
+                        Number(comment.notHelpfulCount) || 0
+                    }</span>
+                </span>
+            </div>
+        `;
+
+        const contentHTML = await renderMarkdown(
+            comment.content,
+            baseUrl,
+            userToken
+        );
+
+        const replyToHTML = isReply && comment.replyToName ?
+            `
+                <div class="reply-to-tag">
+                    @ ${escapeHTML(comment.replyToName)}
+                </div>
+            ` :
+            '';
+
+        const deleteHTML = isOwnComment ?
+            `
+                <button
+                    class="action-btn delete ${
+                        isReply
+                            ? 'delete-reply-btn'
+                            : 'delete-comment-btn'
+                    }"
+                    ${
+                        isReply
+                            ? `data-reply-id="${escapeHTML(comment.id)}"`
+                            : `data-comment-id="${escapeHTML(comment.id)}"`
+                    }
+                    type="button"
+                >🗑️ 删除</button>
+            ` :
+            '';
+
+        const actionsHTML = `
+            <div class="${isReply ? 'reply-actions' : 'comment-actions'}">
+                <div class="action-btns-group">
+                    <button
+                        class="action-btn reply-btn"
+                        data-comment-id="${escapeHTML(currentRootId)}"
+                        data-author-name="${escapeHTML(authorName)}"
+                        type="button"
+                    >💬 回复</button>
+
+                    ${deleteHTML}
+                </div>
+
+                ${statsHTML}
+            </div>
+        `;
+
+        let repliesHTML = '';
+
+        const replies = Array.isArray(comment.replies) ?
+            comment.replies :
+            [];
 
         if (replies.length > 0) {
+            const replyItems = await Promise.all(
+                replies.map(reply => renderComment(
+                    reply,
+                    true,
+                    depth + 1,
+                    currentRootId
+                ))
+            );
+
             if (depth === 0) {
-                const repliesId = 'replies_' + Math.random().toString(36).substr(2, 9);
-                const replyItems = await Promise.all(replies.map(reply => renderComment(reply, true, depth + 1, userToken, currentRootId)));
-                repliesHtml = `
+                const repliesId = makeId('replies');
+
+                repliesHTML = `
                     <div class="replies-toggle">
-                        <div class="replies-toggle-btn" data-replies="${repliesId}">
+                        <div
+                            class="replies-toggle-btn"
+                            data-replies="${repliesId}"
+                            role="button"
+                            tabindex="0"
+                            aria-expanded="false"
+                        >
                             <div class="triangle"></div>
-                            <div class="reply-count">${replies.length}</div>
+                            <div class="reply-count">
+                                ${replies.length}
+                            </div>
                         </div>
                     </div>
-                    <div class="replies-container" id="${repliesId}">${replyItems.join('')}</div>
+
+                    <div
+                        class="replies-container"
+                        id="${repliesId}"
+                    >${replyItems.join('')}</div>
                 `;
             } else {
-                const replyItems = await Promise.all(replies.map(reply => renderComment(reply, true, depth + 1, userToken, currentRootId)));
-                repliesHtml = `<div class="replies-container expanded">${replyItems.join('')}</div>`;
+                repliesHTML = `
+                    <div class="replies-container expanded">
+                        ${replyItems.join('')}
+                    </div>
+                `;
             }
         }
 
-        if (isReply) {
-            return `<div class="reply-item">
-                ${replyToTagHtml}
-                <div class="reply-header">
-                    <div class="reply-avatar-container">
-                        <div class="reply-avatar"${avatarStyle}>${avatarContent}</div>
-                        ${frameHtml}
-                        ${blockBtnHtml}
+        return `
+            <div class="${isReply ? 'reply-item' : 'comment-item'}">
+                ${replyToHTML}
+
+                <div class="${headerClass}">
+                    <div class="${avatarContainerClass}">
+                        <div class="${
+                            avatarClass
+                        }${avatarUrl ? ' has-image' : ''}">
+                            ${avatarContent}
+                        </div>
+
+                        ${frameHTML}
+                        ${blockHTML}
                     </div>
-                    <div class="reply-info">
-                        <span class="reply-author">${comment.authorName}</span>
-                        <span class="reply-time">${comment.createdAt}</span>
-                    </div>
-                </div>
-                ${badgesHtml}
-                <div class="reply-content">${contentHtml}</div>
-                ${actionsHtml}
-                ${repliesHtml}
-            </div>`;
-        } else {
-            return `<div class="comment-item">
-                <div class="comment-header">
-                    <div class="user-avatar-container">
-                        <div class="user-avatar"${avatarStyle}>${avatarContent}</div>
-                        ${frameHtml}
-                        ${blockBtnHtml}
-                    </div>
-                    <div class="user-info">
-                        <span class="comment-author">${comment.authorName}</span>
-                        <span class="comment-time">${comment.createdAt}</span>
+
+                    <div class="${infoClass}">
+                        <span class="${authorClass}">
+                            ${escapeHTML(authorName)}
+                        </span>
+
+                        <span class="${timeClass}">
+                            ${escapeHTML(comment.createdAt || '')}
+                        </span>
                     </div>
                 </div>
-                ${badgesHtml}
-                <div class="comment-content">${contentHtml}</div>
-                ${actionsHtml}
-                ${repliesHtml}
-            </div>`;
-        }
+
+                ${badgesHTML}
+
+                <div class="${
+                    isReply ? 'reply-content' : 'comment-content'
+                }">${contentHTML}</div>
+
+                ${actionsHTML}
+                ${repliesHTML}
+            </div>
+        `;
     }
 
-    const commentItems = await Promise.all(comments.map(comment => renderComment(comment, false, 0, userToken)));
-    return commentItems.join('');
+    const items = await Promise.all(
+        comments.map(comment => renderComment(comment))
+    );
+
+    return items.join('');
 }
 
-async function getReview(baseUrl, bookName, chapterName, bookId, chapterId, detailUrl, coverUrl, userToken) {
+async function getReview(
+    baseUrl,
+    bookName,
+    chapterName,
+    bookId,
+    chapterId,
+    detailUrl,
+    coverUrl,
+    userToken
+) {
+    const version = ++reviewVersion;
+
     const commentType = chapterId ? 'chapter' : 'book';
-    const chapterParam = chapterId ? `&chapter_id=${chapterId}` : '';
-    const apiUrl = `${baseUrl}/api/comment/list.php?type=${commentType}&book_id=${bookId}${chapterParam}&limit=60`;
+
+    const chapterParam = chapterId ?
+        `&chapter_id=${encodeURIComponent(chapterId)}` :
+        '';
+
+    const apiUrl =
+        `${baseUrl}/api/comment/list.php` +
+        `?type=${commentType}` +
+        `&book_id=${encodeURIComponent(bookId)}` +
+        chapterParam +
+        '&limit=60';
 
     try {
-        document.getElementById('bookTitle').textContent = bookName;
-        document.getElementById('chapterTitle').textContent = chapterName || '书评';
+        document.getElementById('bookTitle').textContent =
+            bookName;
+
+        document.getElementById('chapterTitle').textContent =
+            chapterName || '书评';
 
         const headers = createAuthHeaders(userToken);
 
-        const firstResponse = await fetch(`${apiUrl}&page=1`, { headers });
-        const firstData = await firstResponse.json();
-        let allComments = firstData.comments || [];
+        const firstData = await requestJSON(
+            `${apiUrl}&page=1`, {
+                headers
+            }
+        );
 
-        const totalPages = firstData.pages || 1;
-        for (let page = 2; page <= totalPages; page++) {
-            const response = await fetch(`${apiUrl}&page=${page}`, { headers });
-            const data = await response.json();
-            allComments = allComments.concat(data.comments || []);
+        if (firstData.success === false) {
+            throw new Error(firstData.message || '加载失败');
         }
+
+        let allComments = Array.isArray(firstData.comments) ?
+            firstData.comments :
+            [];
+
+        const totalPages = Math.max(
+            1,
+            Number(firstData.pages) || 1
+        );
+
+        for (let page = 2; page <= totalPages; page++) {
+            const data = await requestJSON(
+                `${apiUrl}&page=${page}`, {
+                    headers
+                }
+            );
+
+            if (data.success === false) {
+                throw new Error(data.message || '加载失败');
+            }
+
+            allComments = allComments.concat(
+                Array.isArray(data.comments) ? data.comments : []
+            );
+        }
+
+        if (version !== reviewVersion) return;
 
         cachedComments = allComments;
         await renderSortedComments();
-
     } catch (error) {
+        if (version !== reviewVersion) return;
+
         console.error('加载评论失败:', error);
-        document.getElementById('commentsList').innerHTML = '<div class="error">加载失败,请稍后重试</div>';
+
+        document.getElementById('commentsList').innerHTML =
+            '<div class="error">加载失败，请稍后重试</div>';
     }
 }
 
 function getSortedComments() {
     const list = [...cachedComments];
+
     if (currentSort === 'reverse') {
         list.reverse();
     } else if (currentSort === 'hot') {
-        list.sort((a, b) => (b.helpfulCount || 0) - (a.helpfulCount || 0));
+        list.sort((a, b) => {
+            return (
+                (Number(b.helpfulCount) || 0) -
+                (Number(a.helpfulCount) || 0)
+            );
+        });
     }
+
     return list;
 }
 
 async function renderSortedComments() {
-    document.getElementById('commentsList').innerHTML = '<div class="loading">排序中...</div>';
-    const sorted = getSortedComments();
-    const html = await getComment(sorted, globalConfig.baseUrl, globalConfig.userToken);
-    document.getElementById('commentsList').innerHTML = html;
-    bindInteractiveElements(document.getElementById('commentsList'));
-    bindActionButtons();
+    const version = ++renderVersion;
+    const container = document.getElementById('commentsList');
+
+    container.innerHTML =
+        '<div class="loading">排序中...</div>';
+
+    const html = await getComment(
+        getSortedComments(),
+        globalConfig.baseUrl,
+        globalConfig.userToken
+    );
+
+    if (version !== renderVersion) return;
+
+    container.innerHTML = html;
+
+    bindInteractiveElements(container);
+    bindActionButtons(container);
 }
 
 function initSortBar() {
-    const btn = document.getElementById('sortBarBtn');
+    const button = document.getElementById('sortBarBtn');
     const dropdown = document.getElementById('sortDropdown');
     const label = document.getElementById('sortBarLabel');
     const arrow = document.getElementById('sortBarArrow');
 
-    if (!btn) return;
+    if (!button || !dropdown) return;
 
-    const options = Array.from(dropdown.querySelectorAll('.sort-option'));
-    const LABELS = { default: '默认排序', reverse: '倒序', hot: '热度优先' };
+    const options = Array.from(
+        dropdown.querySelectorAll('.sort-option')
+    );
+
+    const labels = {
+        default: '默认排序',
+        reverse: '倒序',
+        hot: '热度优先'
+    };
 
     function syncWidth() {
         dropdown.style.visibility = 'hidden';
         dropdown.style.display = 'flex';
-        const ddW = dropdown.offsetWidth;
+
+        const dropdownWidth = dropdown.offsetWidth;
+
         dropdown.style.display = '';
         dropdown.style.visibility = '';
-        const w = Math.max(btn.offsetWidth, ddW);
-        btn.style.width = w + 'px';
-        dropdown.style.width = w + 'px';
-    }
 
-    function openDropdown() {
-        syncWidth();
-        dropdown.classList.add('open');
-        arrow.textContent = '▴';
+        const width = Math.max(
+            button.offsetWidth,
+            dropdownWidth
+        );
+
+        button.style.width = width + 'px';
+        dropdown.style.width = width + 'px';
     }
 
     function closeDropdown() {
         dropdown.classList.remove('open');
+        button.setAttribute('aria-expanded', 'false');
         arrow.textContent = '▾';
     }
 
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        dropdown.classList.contains('open') ? closeDropdown() : openDropdown();
+    button.addEventListener('click', event => {
+        event.stopPropagation();
+
+        if (dropdown.classList.contains('open')) {
+            closeDropdown();
+        } else {
+            syncWidth();
+            dropdown.classList.add('open');
+            button.setAttribute('aria-expanded', 'true');
+            arrow.textContent = '▴';
+        }
     });
 
-    document.addEventListener('click', (e) => {
-        if (!btn.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
+    document.addEventListener('click', event => {
+        if (
+            !button.contains(event.target) &&
+            !dropdown.contains(event.target)
+        ) {
+            closeDropdown();
+        }
     });
 
-    async function handleOptionSelect(opt) {
-        const sort = opt.dataset.sort;
-        closeDropdown();
-        if (sort === currentSort) return;
-        currentSort = sort;
-        options.forEach(o => o.classList.remove('active'));
-        opt.classList.add('active');
-        label.textContent = LABELS[sort];
-        await renderSortedComments();
-    }
+    options.forEach(option => {
+        option.addEventListener('click', async event => {
+            event.stopPropagation();
 
-    options.forEach(opt => {
-        opt.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            await handleOptionSelect(opt);
+            const sort = option.dataset.sort;
+            closeDropdown();
+
+            if (sort === currentSort || !labels[sort]) return;
+
+            currentSort = sort;
+
+            options.forEach(item => {
+                item.classList.toggle('active', item === option);
+            });
+
+            label.textContent = labels[sort];
+
+            try {
+                await renderSortedComments();
+            } catch (error) {
+                showToast('排序失败: ' + error.message, 'error');
+            }
         });
     });
 }
@@ -566,40 +1641,72 @@ function toggleCover(coverUrl) {
 
     if (coverBox.classList.contains('expanded')) {
         coverBox.classList.remove('expanded');
-    } else {
-        if (!coverUrl || coverUrl.trim() === '') {
-            const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const bg = isDark ? '#333' : '#f1f5f9';
-            const fg = isDark ? '#666' : '#94a3b8';
-            const svg = `<svg width="300" height="400" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="${bg}"/><text x="50%" y="50%" font-family="sans-serif" font-size="40" fill="${fg}" text-anchor="middle" dominant-baseline="middle" style="writing-mode:vertical-rl">暂无封面</text></svg>`;
-            coverImage.src = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
-        } else {
-            coverImage.src = coverUrl;
-        }
-        coverBox.classList.add('expanded');
+        return;
     }
+
+    const url = safeImageUrl(coverUrl);
+
+    if (url) {
+        coverImage.src = url;
+    } else {
+        const isDark = window.matchMedia(
+            '(prefers-color-scheme: dark)'
+        ).matches;
+
+        const background = isDark ? '#333' : '#f1f5f9';
+        const foreground = isDark ? '#666' : '#94a3b8';
+
+        const svg = `
+            <svg width="300" height="400"
+                 xmlns="http://www.w3.org/2000/svg">
+                <rect
+                    width="100%"
+                    height="100%"
+                    fill="${background}"
+                />
+                <text
+                    x="50%"
+                    y="50%"
+                    font-family="sans-serif"
+                    font-size="40"
+                    fill="${foreground}"
+                    text-anchor="middle"
+                    dominant-baseline="middle"
+                    style="writing-mode:vertical-rl"
+                >暂无封面</text>
+            </svg>
+        `;
+
+        coverImage.src =
+            'data:image/svg+xml;charset=utf-8,' +
+            encodeURIComponent(svg);
+    }
+
+    coverBox.classList.add('expanded');
 }
 
 function initFabMenu() {
-    const fabMain = document.getElementById('fabMain');
-    const fabOptions = document.getElementById('fabOptions');
-    const fabJump = document.getElementById('fabJump');
-    const fabComment = document.getElementById('fabComment');
+    const main = document.getElementById('fabMain');
+    const options = document.getElementById('fabOptions');
 
-    fabMain.addEventListener('click', () => {
-        fabMain.classList.toggle('active');
-        fabOptions.classList.toggle('active');
+    main.addEventListener('click', () => {
+        main.classList.toggle('active');
+        options.classList.toggle('active');
     });
 
-    fabJump.addEventListener('click', () => {
-        if (globalConfig.detailUrl) {
-            window.location.href = globalConfig.detailUrl;
+    document.getElementById('fabJump').addEventListener(
+        'click',
+        () => {
+            if (globalConfig.detailUrl) {
+                window.location.href = globalConfig.detailUrl;
+            }
         }
-    });
+    );
 
-    fabComment.addEventListener('click', () => {
-        openInputPanel('comment');
-    });
+    document.getElementById('fabComment').addEventListener(
+        'click',
+        () => openInputPanel('comment')
+    );
 }
 
 function insertAtCursor(textarea, text, offset = 0) {
@@ -607,118 +1714,171 @@ function insertAtCursor(textarea, text, offset = 0) {
     const end = textarea.selectionEnd;
     const value = textarea.value;
 
-    textarea.value = value.substring(0, start) + text + value.substring(end);
-    textarea.selectionStart = textarea.selectionEnd = start + offset;
+    textarea.value =
+        value.slice(0, start) +
+        text +
+        value.slice(end);
+
+    textarea.selectionStart =
+        textarea.selectionEnd =
+        start + offset;
+
     textarea.focus();
 }
 
 function initMarkdownShortcuts() {
-    const inputField = document.getElementById('inputField');
-    document.getElementById('markdownShortcuts').addEventListener('click', (e) => {
-        const btn = e.target.closest('.shortcut-btn');
-        if (!btn) return;
+    const field = document.getElementById('inputField');
 
-        const syntax = btn.dataset.syntax;
-        let textToInsert = '';
-        let cursorOffset = 0;
-        const selectedText = inputField.value.substring(inputField.selectionStart, inputField.selectionEnd);
+    document.getElementById('markdownShortcuts')
+        .addEventListener('click', event => {
+            const button = event.target.closest('.shortcut-btn');
+            if (!button) return;
 
-        switch (syntax) {
-            case 'bold':
-                textToInsert = `**${selectedText || '粗体文本'}**`;
-                cursorOffset = selectedText ? textToInsert.length : 2;
-                break;
-            case 'italic':
-                textToInsert = `*${selectedText || '斜体文本'}*`;
-                cursorOffset = selectedText ? textToInsert.length : 1;
-                break;
-            case 'code-inline':
-                textToInsert = `\`${selectedText || '代码'}\``;
-                cursorOffset = selectedText ? textToInsert.length : 1;
-                break;
-            case 'code-block':
-                textToInsert = `\n\`\`\`\n${selectedText || '// Your code here'}\n\`\`\`\n`;
-                cursorOffset = selectedText ? textToInsert.length - 4 : 5;
-                break;
-            case 'blockquote':
-                textToInsert = `> ${selectedText || '引用内容'}`;
-                cursorOffset = selectedText ? textToInsert.length : 2;
-                break;
-            case 'list':
-                textToInsert = `- ${selectedText || '列表项'}`;
-                cursorOffset = selectedText ? textToInsert.length : 2;
-                break;
-            case 'link':
-                textToInsert = `[${selectedText || '链接文本'}](https://example.com)`;
-                cursorOffset = selectedText ? textToInsert.length : 1;
-                break;
-            case 'image':
-                textToInsert = `![${selectedText || '图片描述'}](https://example.com/image.jpg)`;
-                cursorOffset = 2;
-                break;
-            case 'bookid':
-                textToInsert = `[bookid:353686|tag,bio]`;
-                cursorOffset = 9;
-                break;
-            case 'fold':
-                textToInsert = `[fold:点击展开]折叠内容[/fold]`;
-                cursorOffset = 5;
-                break;
-            case 'spoiler':
-                textToInsert = `||剧透内容||`;
-                cursorOffset = 2;
-                break;
-        }
-        insertAtCursor(inputField, textToInsert, cursorOffset);
-    });
+            const selected = field.value.substring(
+                field.selectionStart,
+                field.selectionEnd
+            );
+
+            let text = '';
+            let offset = 0;
+
+            switch (button.dataset.syntax) {
+                case 'bold':
+                    text = `**${selected || '粗体文本'}**`;
+                    offset = selected ? text.length : 2;
+                    break;
+
+                case 'italic':
+                    text = `*${selected || '斜体文本'}*`;
+                    offset = selected ? text.length : 1;
+                    break;
+
+                case 'code-inline':
+                    text = `\`${selected || '代码'}\``;
+                    offset = selected ? text.length : 1;
+                    break;
+
+                case 'code-block':
+                    text =
+                        '\n```\n' +
+                        (selected || '// Your code here') +
+                        '\n```\n';
+
+                    offset = selected ? text.length - 4 : 5;
+                    break;
+
+                case 'blockquote':
+                    text = `> ${selected || '引用内容'}`;
+                    offset = selected ? text.length : 2;
+                    break;
+
+                case 'list':
+                    text = `- ${selected || '列表项'}`;
+                    offset = selected ? text.length : 2;
+                    break;
+
+                case 'link':
+                    text =
+                        `[${selected || '链接文本'}]` +
+                        '(https://example.com)';
+
+                    offset = selected ? text.length : 1;
+                    break;
+
+                case 'image':
+                    text =
+                        `![${selected || '图片描述'}]` +
+                        '(https://example.com/image.jpg)';
+
+                    offset = 2;
+                    break;
+
+                case 'bookid':
+                    text = '[bookid:353686|tag,bio]';
+                    offset = 8;
+                    break;
+
+                case 'fold':
+                    text = '[fold:点击展开]折叠内容[/fold]';
+                    offset = 6;
+                    break;
+
+                case 'spoiler':
+                    text = '||剧透内容||';
+                    offset = 2;
+                    break;
+
+                default:
+                    return;
+            }
+
+            insertAtCursor(field, text, offset);
+        });
 }
 
-let currentInputMode = null;
-let currentCommentId = null;
-let currentReplyToName = null;
+function setInputTab(tab) {
+    document.querySelectorAll('.input-tab-btn')
+        .forEach(button => {
+            button.classList.toggle(
+                'active',
+                button.dataset.tab === tab
+            );
+        });
+
+    document.querySelectorAll('.input-tab-content')
+        .forEach(content => {
+            content.classList.toggle(
+                'active',
+                content.dataset.tabContent === tab
+            );
+        });
+
+    document.getElementById('markdownShortcuts')
+        .classList.toggle('hidden', tab === 'preview');
+}
 
 function openInputPanel(mode, commentId = null, authorName = null) {
     const overlay = document.getElementById('inputOverlay');
     const title = document.getElementById('inputTitle');
     const subtitle = document.getElementById('inputSubtitle');
     const field = document.getElementById('inputField');
-    const editTabBtn = document.querySelector('.input-tab-btn[data-tab="edit"]');
-    const previewTabBtn = document.querySelector('.input-tab-btn[data-tab="preview"]');
-    const editTabContent = document.querySelector('.input-tab-content[data-tab-content="edit"]');
-    const previewTabContent = document.querySelector('.input-tab-content[data-tab-content="preview"]');
-    const markdownShortcuts = document.getElementById('markdownShortcuts');
 
     currentInputMode = mode;
     currentCommentId = commentId;
     currentReplyToName = authorName;
 
+    previewVersion++;
+
     if (mode === 'comment') {
-        const isChapter = !!globalConfig.chapterId;
-        title.textContent = isChapter ? '发表章评' : '发表书评';
+        title.textContent = globalConfig.chapterId ?
+            '发表章评' :
+            '发表书评';
+
         subtitle.textContent = '分享你的想法';
-    } else if (mode === 'reply') {
+    } else {
         title.textContent = '回复评论';
-        subtitle.textContent = `@ ${authorName}`;
+        subtitle.textContent = `@ ${authorName || ''}`;
     }
 
     field.value = '';
+
+    setInputTab('edit');
+
+    document.getElementById('inputPreview').innerHTML = '';
+
     overlay.classList.add('active');
     field.focus();
-
-    editTabBtn.classList.add('active');
-    previewTabBtn.classList.remove('active');
-    editTabContent.classList.add('active');
-    previewTabContent.classList.remove('active');
-    markdownShortcuts.classList.remove('hidden');
-    document.getElementById('inputPreview').innerHTML = '';
 }
 
 function closeInputPanel() {
-    const overlay = document.getElementById('inputOverlay');
-    overlay.classList.remove('active');
+    document.getElementById('inputOverlay')
+        .classList.remove('active');
+
     currentInputMode = null;
     currentCommentId = null;
     currentReplyToName = null;
+
+    previewVersion++;
 }
 
 async function submitInput() {
@@ -735,470 +1895,795 @@ async function submitInput() {
         return;
     }
 
-    const submitBtn = document.getElementById('inputSubmit');
-    submitBtn.disabled = true;
-    submitBtn.textContent = '发送中...';
+    if (!['comment', 'reply'].includes(currentInputMode)) {
+        return;
+    }
+
+    const submitButton = document.getElementById('inputSubmit');
+
+    if (submitButton.disabled) return;
+
+    submitButton.disabled = true;
+    submitButton.textContent = '发送中...';
 
     try {
-        const headers = createAuthHeaders(globalConfig.userToken);
+        const headers = createAuthHeaders(
+            globalConfig.userToken
+        );
+
         headers['Content-Type'] = 'application/json';
 
-        let url, body;
+        let url;
+        let body;
 
         if (currentInputMode === 'comment') {
-            url = `${globalConfig.baseUrl}/api/comment/create.php`;
+            url =
+                `${globalConfig.baseUrl}/api/comment/create.php`;
+
             body = {
                 type: globalConfig.chapterId ? 'chapter' : 'book',
                 book_id: globalConfig.bookId,
-                content: content
+                content
             };
+
             if (globalConfig.chapterId) {
                 body.chapter_id = globalConfig.chapterId;
             }
-        } else if (currentInputMode === 'reply') {
-            url = `${globalConfig.baseUrl}/api/comment/reply.php`;
+        } else {
+            url =
+                `${globalConfig.baseUrl}/api/comment/reply.php`;
+
             body = {
                 comment_id: currentCommentId,
-                content: content,
+                content,
                 reply_to_name: currentReplyToName
             };
         }
 
-        const response = await fetch(url, {
+        const result = await requestJSON(url, {
             method: 'POST',
-            headers: headers,
+            headers,
             body: JSON.stringify(body)
         });
 
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showToast('发表成功', 'success');
-            closeInputPanel();
-            await getReview(
-                globalConfig.baseUrl,
-                globalConfig.bookName,
-                globalConfig.chapterName,
-                globalConfig.bookId,
-                globalConfig.chapterId,
-                globalConfig.detailUrl,
-                globalConfig.coverUrl,
-                globalConfig.userToken
-            );
-        } else {
+        if (!result.success) {
             throw new Error(result.message || '发表失败');
         }
+
+        showToast('发表成功', 'success');
+        closeInputPanel();
+
+        await refreshReview();
     } catch (error) {
         console.error('发表失败:', error);
         showToast('发表失败: ' + error.message, 'error');
     } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = '发送';
+        submitButton.disabled = false;
+        submitButton.textContent = '发送';
     }
 }
 
-async function deleteComment(commentId) {
-    if (!confirm('确定要删除这条评论吗？')) {
+function initInputPanel() {
+    const overlay = document.getElementById('inputOverlay');
+
+    overlay.addEventListener('click', event => {
+        if (event.target === overlay) {
+            closeInputPanel();
+        }
+    });
+
+    document.getElementById('inputCancel')
+        .addEventListener('click', closeInputPanel);
+
+    document.getElementById('inputSubmit')
+        .addEventListener('click', submitInput);
+
+    document.querySelectorAll('.input-tab-btn')
+        .forEach(button => {
+            button.addEventListener('click', async () => {
+                const tab = button.dataset.tab;
+                const version = ++previewVersion;
+
+                setInputTab(tab);
+
+                if (tab !== 'preview') return;
+
+                const preview = document.getElementById('inputPreview');
+
+                preview.innerHTML =
+                    '<div class="book-loading">渲染中...</div>';
+
+                try {
+                    const html = await renderMarkdown(
+                        document.getElementById('inputField').value,
+                        globalConfig.baseUrl,
+                        globalConfig.userToken
+                    );
+
+                    if (version !== previewVersion) return;
+
+                    preview.innerHTML = html;
+                    bindInteractiveElements(preview);
+                } catch (error) {
+                    if (version !== previewVersion) return;
+
+                    preview.textContent =
+                        '预览失败: ' + error.message;
+                }
+            });
+        });
+
+    initMarkdownShortcuts();
+}
+
+async function deleteEntry(id, isReply) {
+    const label = isReply ? '回复' : '评论';
+
+    if (!confirm(`确定要删除这条${label}吗？`)) {
         return;
     }
 
     if (!globalConfig.userToken) {
-        showToast('未登录，无法删除评论', 'error');
+        showToast(`未登录，无法删除${label}`, 'error');
         return;
     }
 
     try {
-        const headers = createAuthHeaders(globalConfig.userToken);
+        const headers = createAuthHeaders(
+            globalConfig.userToken
+        );
+
         headers['Content-Type'] = 'application/json';
 
-        const response = await fetch(`${globalConfig.baseUrl}/api/comment/delete.php`, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({ comment_id: commentId })
-        });
+        const body = isReply ?
+            {
+                reply_id: id
+            } :
+            {
+                comment_id: id
+            };
 
-        const result = await response.json();
+        const result = await requestJSON(
+            `${globalConfig.baseUrl}/api/comment/delete.php`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body)
+            }
+        );
 
-        if (response.ok && result.success) {
-            showToast('删除成功', 'success');
-            await getReview(
-                globalConfig.baseUrl,
-                globalConfig.bookName,
-                globalConfig.chapterName,
-                globalConfig.bookId,
-                globalConfig.chapterId,
-                globalConfig.detailUrl,
-                globalConfig.coverUrl,
-                globalConfig.userToken
-            );
-        } else {
+        if (!result.success) {
             throw new Error(result.message || '删除失败');
         }
+
+        showToast('删除成功', 'success');
+        await refreshReview();
     } catch (error) {
         console.error('删除失败:', error);
         showToast('删除失败: ' + error.message, 'error');
     }
 }
 
-async function deleteReply(replyId) {
-    if (!confirm('确定要删除这条回复吗？')) {
-        return;
-    }
-
-    if (!globalConfig.userToken) {
-        showToast('未登录，无法删除回复', 'error');
-        return;
-    }
-
-    try {
-        const headers = createAuthHeaders(globalConfig.userToken);
-        headers['Content-Type'] = 'application/json';
-
-        const response = await fetch(`${globalConfig.baseUrl}/api/comment/delete.php`, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({ reply_id: replyId })
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showToast('删除成功', 'success');
-            await getReview(
-                globalConfig.baseUrl,
-                globalConfig.bookName,
-                globalConfig.chapterName,
-                globalConfig.bookId,
-                globalConfig.chapterId,
-                globalConfig.detailUrl,
-                globalConfig.coverUrl,
-                globalConfig.userToken
-            );
-        } else {
-            throw new Error(result.message || '删除失败');
-        }
-    } catch (error) {
-        console.error('删除失败:', error);
-        showToast('删除失败: ' + error.message, 'error');
-    }
+function deleteComment(commentId) {
+    return deleteEntry(commentId, false);
 }
 
-async function handleReaction(commentId, reactionType, targetElement) {
+function deleteReply(replyId) {
+    return deleteEntry(replyId, true);
+}
+
+function findCachedComment(id, isReply) {
+    function visit(list, replyLevel) {
+        for (const item of list) {
+            if (
+                replyLevel === isReply &&
+                String(item.id) === String(id)
+            ) {
+                return item;
+            }
+
+            if (Array.isArray(item.replies)) {
+                const found = visit(item.replies, true);
+                if (found) return found;
+            }
+        }
+
+        return null;
+    }
+
+    return visit(cachedComments, false);
+}
+
+function updateReactionButton(button, type, active, count) {
+    button.classList.toggle('active', active);
+
+    button.innerHTML = `
+        ${active ? ICONS[type].filled : ICONS[type].outline}
+        <span class="count">${Number(count) || 0}</span>
+    `;
+}
+
+async function handleReaction(
+    commentId,
+    reactionType,
+    targetElement
+) {
     if (!globalConfig.userToken) {
         showToast('请先登录后再进行操作', 'error');
         return;
     }
 
+    if (!ICONS[reactionType]) return;
+
+    const statsContainer = targetElement.closest(
+        '.comment-stats, .reply-stats'
+    );
+
+    if (!statsContainer || statsContainer.dataset.pending) {
+        return;
+    }
+
+    statsContainer.dataset.pending = '1';
+
+    statsContainer.querySelectorAll('.stat-item')
+        .forEach(button => button.classList.add('pending'));
+
     try {
-        const headers = createAuthHeaders(globalConfig.userToken);
+        const headers = createAuthHeaders(
+            globalConfig.userToken
+        );
+
         headers['Content-Type'] = 'application/json';
 
-        const isReply = targetElement.closest('.reply-stats') !== null;
-        const body = { reaction_type: reactionType };
+        const isReply = statsContainer.classList.contains(
+            'reply-stats'
+        );
+
+        const body = {
+            reaction_type: reactionType
+        };
 
         if (isReply) {
-            body.reply_id = parseInt(commentId);
+            body.reply_id = parseInt(commentId, 10);
         } else {
-            body.comment_id = parseInt(commentId);
+            body.comment_id = parseInt(commentId, 10);
         }
 
-        const response = await fetch(`${globalConfig.baseUrl}/api/comment/react.php`, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(body)
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success && result.counts) {
-            const statsContainer = targetElement.closest('.comment-stats, .reply-stats');
-            if (statsContainer) {
-                const helpfulBtn = statsContainer.querySelector('.helpful');
-                const notHelpfulBtn = statsContainer.querySelector('.not-helpful');
-
-                helpfulBtn.querySelector('.count').textContent = result.counts.helpful;
-                notHelpfulBtn.querySelector('.count').textContent = result.counts.not_helpful;
-
-                const btn = (reactionType === 'helpful') ? helpfulBtn : notHelpfulBtn;
-                const isActive = btn.classList.toggle('active');
-
-                btn.innerHTML = `
-                    ${isActive ? ICONS[reactionType].filled : ICONS[reactionType].outline}
-                    <span class="count">${result.counts[reactionType]}</span>
-                `;
+        const result = await requestJSON(
+            `${globalConfig.baseUrl}/api/comment/react.php`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body)
             }
-        } else {
+        );
+
+        if (!result.success || !result.counts) {
             throw new Error(result.message || '操作失败');
+        }
+
+        const helpfulButton = statsContainer.querySelector(
+            '.helpful'
+        );
+
+        const notHelpfulButton = statsContainer.querySelector(
+            '.not-helpful'
+        );
+
+        let helpfulActive = helpfulButton.classList.contains('active');
+        let notHelpfulActive = notHelpfulButton.classList.contains('active');
+
+        const serverReactions =
+            Array.isArray(result.userReactions) ?
+            result.userReactions :
+            Array.isArray(result.user_reactions) ?
+            result.user_reactions :
+            null;
+
+        if (serverReactions) {
+            helpfulActive = serverReactions.includes('helpful');
+            notHelpfulActive = serverReactions.includes('not_helpful');
+        } else if (reactionType === 'helpful') {
+            helpfulActive = !helpfulActive;
+        } else {
+            notHelpfulActive = !notHelpfulActive;
+        }
+
+        updateReactionButton(
+            helpfulButton,
+            'helpful',
+            helpfulActive,
+            result.counts.helpful
+        );
+
+        updateReactionButton(
+            notHelpfulButton,
+            'not_helpful',
+            notHelpfulActive,
+            result.counts.not_helpful
+        );
+
+        const cached = findCachedComment(commentId, isReply);
+
+        if (cached) {
+            cached.helpfulCount =
+                Number(result.counts.helpful) || 0;
+
+            cached.notHelpfulCount =
+                Number(result.counts.not_helpful) || 0;
+
+            cached.userReactions = [
+                ...(helpfulActive ? ['helpful'] : []),
+                ...(notHelpfulActive ? ['not_helpful'] : [])
+            ];
         }
     } catch (error) {
         console.error('评价失败:', error);
         showToast('操作失败: ' + error.message, 'error');
+    } finally {
+        delete statsContainer.dataset.pending;
+
+        statsContainer.querySelectorAll('.stat-item')
+            .forEach(button => button.classList.remove('pending'));
     }
 }
 
-function bindActionButtons() {
-    document.querySelectorAll('.reply-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const commentId = btn.dataset.commentId;
-            const authorName = btn.dataset.authorName;
-            openInputPanel('reply', commentId, authorName);
+function bindActionButtons(
+    container = document.getElementById('commentsList')
+) {
+    container.querySelectorAll('.reply-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            openInputPanel(
+                'reply',
+                button.dataset.commentId,
+                button.dataset.authorName
+            );
         });
     });
 
-    document.querySelectorAll('.delete-comment-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const commentId = btn.dataset.commentId;
-            deleteComment(commentId);
+    container.querySelectorAll('.delete-comment-btn')
+        .forEach(button => {
+            button.addEventListener('click', () => {
+                deleteComment(button.dataset.commentId);
+            });
         });
-    });
 
-    document.querySelectorAll('.delete-reply-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const replyId = btn.dataset.replyId;
-            deleteReply(replyId);
+    container.querySelectorAll('.delete-reply-btn')
+        .forEach(button => {
+            button.addEventListener('click', () => {
+                deleteReply(button.dataset.replyId);
+            });
         });
-    });
 
-    document.querySelectorAll('.stat-item').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const commentId = btn.dataset.id;
-            const reactionType = btn.dataset.type;
-            if (commentId && reactionType) {
-                handleReaction(commentId, reactionType, btn);
-            }
+    container.querySelectorAll('.block-btn')
+        .forEach(button => {
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+
+                blockUser(
+                    button.dataset.userId,
+                    button
+                );
+            });
         });
-    });
+
+    container.querySelectorAll('.stat-item')
+        .forEach(button => {
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+
+                handleReaction(
+                    button.dataset.id,
+                    button.dataset.type,
+                    button
+                );
+            });
+
+            button.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    button.click();
+                }
+            });
+        });
 }
 
 function bindInteractiveElements(container) {
     container.querySelectorAll('.spoiler').forEach(spoiler => {
-        spoiler.removeEventListener('click', revealSpoilerClick);
-        spoiler.removeEventListener('touchstart', spoilerTouchStart);
-        spoiler.removeEventListener('touchmove', spoilerTouchMove);
-        spoiler.removeEventListener('touchend', spoilerTouchEnd);
+        if (spoiler.dataset.bound) return;
+        spoiler.dataset.bound = '1';
+
         spoiler.addEventListener('click', revealSpoilerClick);
-        spoiler.addEventListener('touchstart', spoilerTouchStart, {passive: true});
-        spoiler.addEventListener('touchmove', spoilerTouchMove, {passive: true});
-        spoiler.addEventListener('touchend', spoilerTouchEnd, {passive: false});
+
+        spoiler.addEventListener(
+            'touchstart',
+            spoilerTouchStart, {
+                passive: true
+            }
+        );
+
+        spoiler.addEventListener(
+            'touchmove',
+            spoilerTouchMove, {
+                passive: true
+            }
+        );
+
+        spoiler.addEventListener(
+            'touchend',
+            spoilerTouchEnd, {
+                passive: false
+            }
+        );
+
+        spoiler.addEventListener(
+            'touchcancel',
+            spoilerTouchCancel
+        );
     });
 
     container.querySelectorAll('.fold-header').forEach(header => {
-        header.removeEventListener('click', toggleFoldClick);
-        header.removeEventListener('touchend', toggleFoldTouchEnd);
+        if (header.dataset.bound) return;
+        header.dataset.bound = '1';
+
         header.addEventListener('click', toggleFoldClick);
-        header.addEventListener('touchend', toggleFoldTouchEnd, {passive: false});
+
+        header.addEventListener(
+            'touchend',
+            toggleFoldTouchEnd, {
+                passive: false
+            }
+        );
+
+        header.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                header.click();
+            }
+        });
     });
 
-    container.querySelectorAll('.replies-toggle-btn').forEach(btn => {
-        btn.removeEventListener('click', toggleRepliesClick);
-        btn.removeEventListener('touchend', toggleRepliesTouchEnd);
-        btn.addEventListener('click', toggleRepliesClick);
-        btn.addEventListener('touchend', toggleRepliesTouchEnd, {passive: false});
-    });
+    container.querySelectorAll('.replies-toggle-btn')
+        .forEach(button => {
+            if (button.dataset.bound) return;
+            button.dataset.bound = '1';
 
-    // 新增：绑定头像长按
+            button.addEventListener('click', toggleRepliesClick);
+
+            button.addEventListener(
+                'touchend',
+                toggleRepliesTouchEnd, {
+                    passive: false
+                }
+            );
+
+            button.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    button.click();
+                }
+            });
+        });
+
     initAvatarLongPress(container);
+    hydrateBookCards(container);
 }
 
-function revealSpoilerClick(e) {
-    const target = e.target;
-    if (target.dataset.spoiler && !target.classList.contains('revealed')) {
+function revealSpoilerClick(event) {
+    const target = event.currentTarget;
+
+    if (Date.now() < Number(target.dataset.suppressClickUntil || 0)) {
+        event.preventDefault();
+        return;
+    }
+
+    if (!target.classList.contains('revealed')) {
         target.classList.add('revealed');
     }
 }
 
-function spoilerTouchStart(e) {
-    const target = e.target;
-    if (target.dataset.spoiler && !target.classList.contains('revealed')) {
-        startTime = Date.now();
-        pressTimer = setTimeout(() => {
-            if (!hasMoved) {
-                target.classList.add('temp-show');
-            }
-        }, PRESS_DURATION);
-    }
+function spoilerTouchStart(event) {
+    const target = event.currentTarget;
+
+    if (target.classList.contains('revealed')) return;
+
+    startTime = Date.now();
+    hasMoved = false;
+
+    touchStartX = event.touches[0].clientX;
+    touchStartY = event.touches[0].clientY;
+
+    clearTimeout(pressTimer);
+
+    pressTimer = setTimeout(() => {
+        if (!hasMoved) {
+            target.classList.add('temp-show');
+        }
+    }, PRESS_DURATION);
 }
 
-function spoilerTouchMove(e) {
-    const target = e.target;
-    if (target.dataset.spoiler) {
-        const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
-        const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
+function spoilerTouchMove(event) {
+    const target = event.currentTarget;
 
-        if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
-            hasMoved = true;
-            if (pressTimer) {
-                clearTimeout(pressTimer);
-                pressTimer = null;
-            }
-            target.classList.remove('temp-show');
-        }
-    }
-}
+    const deltaX = Math.abs(
+        event.touches[0].clientX - touchStartX
+    );
 
-function spoilerTouchEnd(e) {
-    const target = e.target;
-    if (target.dataset.spoiler && !target.classList.contains('revealed')) {
-        if (pressTimer) {
-            clearTimeout(pressTimer);
-            pressTimer = null;
-        }
+    const deltaY = Math.abs(
+        event.touches[0].clientY - touchStartY
+    );
 
-        const pressDuration = Date.now() - startTime;
+    if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
+        hasMoved = true;
+
+        clearTimeout(pressTimer);
+        pressTimer = null;
+
         target.classList.remove('temp-show');
+    }
+}
 
-        if (pressDuration < PRESS_DURATION && !hasMoved) {
-            e.preventDefault();
+function spoilerTouchEnd(event) {
+    const target = event.currentTarget;
+
+    clearTimeout(pressTimer);
+    pressTimer = null;
+
+    target.classList.remove('temp-show');
+
+    if (target.classList.contains('revealed')) return;
+
+    const duration = Date.now() - startTime;
+
+    target.dataset.suppressClickUntil = String(Date.now() + 700);
+
+    if (!hasMoved) {
+        event.preventDefault();
+
+        if (duration < PRESS_DURATION) {
             target.classList.add('revealed');
         }
     }
-    hasMoved = false;
 }
 
-function toggleFoldClick(e) {
-    const header = e.target.closest('.fold-header');
-    if (header) {
-        const foldContent = document.getElementById(header.dataset.fold);
-        if (foldContent) {
-            header.classList.toggle('expanded');
-            foldContent.classList.toggle('expanded');
-        }
+function spoilerTouchCancel(event) {
+    clearTimeout(pressTimer);
+    pressTimer = null;
+
+    event.currentTarget.classList.remove('temp-show');
+    hasMoved = true;
+}
+
+function toggleFold(header) {
+    const content = document.getElementById(
+        header.dataset.fold
+    );
+
+    if (!content) return;
+
+    const expanded = header.classList.toggle('expanded');
+
+    content.classList.toggle('expanded', expanded);
+    header.setAttribute('aria-expanded', String(expanded));
+}
+
+function toggleFoldClick(event) {
+    const header = event.currentTarget;
+
+    if (
+        Date.now() <
+        Number(header.dataset.suppressClickUntil || 0)
+    ) {
+        return;
+    }
+
+    toggleFold(header);
+}
+
+function toggleFoldTouchEnd(event) {
+    const header = event.currentTarget;
+
+    header.dataset.suppressClickUntil = String(Date.now() + 700);
+
+    if (!hasMoved) {
+        event.preventDefault();
+        toggleFold(header);
     }
 }
 
-function toggleFoldTouchEnd(e) {
-    const header = e.target.closest('.fold-header');
-    if (header && !hasMoved) {
-        e.preventDefault();
-        const foldContent = document.getElementById(header.dataset.fold);
-        if (foldContent) {
-            header.classList.toggle('expanded');
-            foldContent.classList.toggle('expanded');
-        }
+function toggleReplies(button) {
+    const container = document.getElementById(
+        button.dataset.replies
+    );
+
+    if (!container) return;
+
+    const expanded = button.classList.toggle('expanded');
+
+    container.classList.toggle('expanded', expanded);
+    button.setAttribute('aria-expanded', String(expanded));
+
+    if (expanded) {
+        container.querySelectorAll('source-badge')
+            .forEach(badge => badge.scheduleFit?.());
     }
 }
 
-function toggleRepliesClick(e) {
-    const toggleBtn = e.target.closest('.replies-toggle-btn');
-    if (toggleBtn) {
-        const repliesContainer = document.getElementById(toggleBtn.dataset.replies);
-        if (repliesContainer) {
-            toggleBtn.classList.toggle('expanded');
-            repliesContainer.classList.toggle('expanded');
-        }
+function toggleRepliesClick(event) {
+    const button = event.currentTarget;
+
+    if (
+        Date.now() <
+        Number(button.dataset.suppressClickUntil || 0)
+    ) {
+        return;
+    }
+
+    toggleReplies(button);
+}
+
+function toggleRepliesTouchEnd(event) {
+    const button = event.currentTarget;
+
+    button.dataset.suppressClickUntil = String(Date.now() + 700);
+
+    if (!hasMoved) {
+        event.preventDefault();
+        toggleReplies(button);
     }
 }
 
-function toggleRepliesTouchEnd(e) {
-    const toggleBtn = e.target.closest('.replies-toggle-btn');
-    if (toggleBtn && !hasMoved) {
-        e.preventDefault();
-        const repliesContainer = document.getElementById(toggleBtn.dataset.replies);
-        if (repliesContainer) {
-            toggleBtn.classList.toggle('expanded');
-            repliesContainer.classList.toggle('expanded');
-        }
+function showImageViewer(target) {
+    if (!window.Viewer) {
+        showToast('图片查看组件尚未加载', 'error');
+        return;
     }
+
+    const viewer = new Viewer(target, {
+        navbar: false,
+        title: false,
+
+        toolbar: {
+            zoomIn: 1,
+            zoomOut: 1,
+            oneToOne: 1,
+            reset: 1,
+            rotateLeft: 1,
+            rotateRight: 1,
+            flipHorizontal: 1,
+            flipVertical: 1
+        },
+
+        keyboard: false,
+
+        hidden() {
+            viewer.destroy();
+        }
+    });
+
+    viewer.show();
 }
 
 function initImageViewer() {
-    document.addEventListener('click', (e) => {
-        const target = e.target;
-        if (target.tagName !== 'IMG') return;
+    document.addEventListener('click', event => {
+        const path = event.composedPath ?
+            event.composedPath() :
+            [event.target];
 
-        if (target.closest('.avatar-frame') || target.closest('.reply-avatar-frame') || target.closest('.book-card') || target.closest('.viewer-container')) return;
-
-        if (target.id === 'coverImage' && !document.getElementById('coverBox').classList.contains('expanded')) return;
-
-        const viewer = new Viewer(target, {
-            navbar: false,
-            title: false,
-            toolbar: {
-                zoomIn: 1,
-                zoomOut: 1,
-                oneToOne: 1,
-                reset: 1,
-                rotateLeft: 1,
-                rotateRight: 1,
-                flipHorizontal: 1,
-                flipVertical: 1,
-            },
-            keyboard: false,
-            hidden() {
-                viewer.destroy();
-            }
+        const target = path.find(node => {
+            return node instanceof Element &&
+                node.tagName === 'IMG';
         });
-        viewer.show();
-    });
-}
 
-function initInputPanel() {
-    const overlay = document.getElementById('inputOverlay');
-    const cancelBtn = document.getElementById('inputCancel');
-    const submitBtn = document.getElementById('inputSubmit');
-    const inputField = document.getElementById('inputField');
-    const previewDiv = document.getElementById('inputPreview');
-    const tabButtons = document.querySelectorAll('.input-tab-btn');
-    const tabContents = document.querySelectorAll('.input-tab-content');
-    const markdownShortcuts = document.getElementById('markdownShortcuts');
+        if (!target) return;
 
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-            closeInputPanel();
+        const insideViewerOrCard = path.some(node => {
+            return node instanceof Element &&
+                node.matches(
+                    '.avatar-frame, ' +
+                    '.reply-avatar-frame, ' +
+                    '.book-card, ' +
+                    '.viewer-container'
+                );
+        });
+
+        if (insideViewerOrCard) return;
+
+        if (
+            target.closest(
+                '.avatar-frame, ' +
+                '.reply-avatar-frame, ' +
+                '.book-card, ' +
+                '.viewer-container'
+            )
+        ) {
+            return;
+        }
+
+        if (
+            target.id === 'coverImage' &&
+            !document.getElementById('coverBox')
+            .classList.contains('expanded')
+        ) {
+            return;
+        }
+
+        const inBadge = path.some(node => {
+            return node instanceof Element &&
+                node.tagName === 'SOURCE-BADGE';
+        });
+
+        if (inBadge) {
+            const copy = document.createElement('img');
+            copy.src = target.currentSrc || target.src;
+            copy.alt = target.alt || '';
+
+            showImageViewer(copy);
+        } else {
+            showImageViewer(target);
         }
     });
-
-    cancelBtn.addEventListener('click', closeInputPanel);
-    submitBtn.addEventListener('click', submitInput);
-
-    tabButtons.forEach(button => {
-        button.addEventListener('click', async () => {
-            const targetTab = button.dataset.tab;
-
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabContents.forEach(content => content.classList.remove('active'));
-
-            button.classList.add('active');
-            document.querySelector(`.input-tab-content[data-tab-content="${targetTab}"]`).classList.add('active');
-
-            if (targetTab === 'preview') {
-                markdownShortcuts.classList.add('hidden');
-                const markdownText = inputField.value;
-                previewDiv.innerHTML = '<div class="book-loading">渲染中...</div>';
-                const renderedHtml = await renderMarkdown(markdownText, globalConfig.baseUrl, globalConfig.userToken);
-                previewDiv.innerHTML = renderedHtml;
-
-                bindInteractiveElements(previewDiv);
-            } else {
-                markdownShortcuts.classList.remove('hidden');
-            }
-        });
-    });
-
-    initMarkdownShortcuts();
 }
 
-document.addEventListener('touchstart', function(e) {
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    hasMoved = false;
-}, {passive: true});
+document.addEventListener(
+    'touchstart',
+    event => {
+        if (!event.touches.length) return;
 
-document.addEventListener('touchmove', function(e) {
-    if (!hasMoved) {
-        const deltaX = Math.abs(e.touches[0].clientX - touchStartX);
-        const deltaY = Math.abs(e.touches[0].clientY - touchStartY);
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+        hasMoved = false;
+    }, {
+        passive: true
+    }
+);
 
-        if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
+document.addEventListener(
+    'touchmove',
+    event => {
+        if (hasMoved || !event.touches.length) return;
+
+        const deltaX = Math.abs(
+            event.touches[0].clientX - touchStartX
+        );
+
+        const deltaY = Math.abs(
+            event.touches[0].clientY - touchStartY
+        );
+
+        if (
+            deltaX > MOVE_THRESHOLD ||
+            deltaY > MOVE_THRESHOLD
+        ) {
             hasMoved = true;
         }
+    }, {
+        passive: true
     }
-}, {passive: true});
+);
 
+document.addEventListener(
+    'touchcancel',
+    () => {
+        hasMoved = true;
+
+        clearTimeout(pressTimer);
+        clearTimeout(avatarPressTimer);
+
+        pressTimer = null;
+        avatarPressTimer = null;
+    }, {
+        passive: true
+    }
+);
 
 function initComments(config) {
-    const baseUrl = config[0] || '';
+    if (!Array.isArray(config)) {
+        document.getElementById('commentsList').innerHTML =
+            '<div class="error">配置格式错误</div>';
+
+        return;
+    }
+
+    const baseUrl = String(config[0] || '').replace(/\/+$/, '');
     const bookName = config[1] || '未知书籍';
     const bookId = config[2] || '';
     const chapterName = config[3] || '';
@@ -1220,22 +2705,37 @@ function initComments(config) {
 
     currentUserId = parseUserToken(userToken);
 
-    initFabMenu();
-    initImageViewer();
-    initInputPanel();
-    initSortBar();
+    if (!uiInitialized) {
+        uiInitialized = true;
 
-    if (baseUrl && bookId) {
-        getReview(baseUrl, bookName, chapterName, bookId, chapterId, detailUrl, coverUrl, userToken);
+        initFabMenu();
+        initImageViewer();
+        initInputPanel();
+        initSortBar();
 
-        const headerBox = document.getElementById('headerBox');
-        headerBox.addEventListener('click', (e) => {
-            if (e.target.id !== 'coverImage') {
-                toggleCover(coverUrl);
+        const header = document.getElementById('headerBox');
+
+        header.addEventListener('click', event => {
+            if (event.target.id !== 'coverImage') {
+                toggleCover(globalConfig.coverUrl);
             }
         });
-        headerBox.style.cursor = 'pointer';
+
+        header.style.cursor = 'pointer';
+    }
+
+    if (!window.DOMPurify) {
+        showToast(
+            'HTML 净化组件加载失败，部分内容将以纯文本显示',
+            'error',
+            5000
+        );
+    }
+
+    if (baseUrl && bookId) {
+        refreshReview();
     } else {
-        document.getElementById('commentsList').innerHTML = '<div class="error">缺少必要参数</div>';
+        document.getElementById('commentsList').innerHTML =
+            '<div class="error">缺少必要参数</div>';
     }
 }
