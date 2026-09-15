@@ -1045,20 +1045,21 @@ async function processFoldTags(text, baseUrl, userToken) {
             userToken
         );
 
-        resultParts.push(`
-<div class="fold-container">
-    <div
-        class="fold-header"
-        data-fold="${foldId}"
-        role="button"
-        tabindex="0"
-        aria-expanded="false"
-    >${escapeHTML(title)}</div>
-    <div class="fold-content" id="${foldId}">
-        ${renderedContent}
-    </div>
-</div>
-`);
+        resultParts.push(
+        '\n\n' +
+        '<div class="fold-container">\n' +
+        '<div class="fold-header"' +
+        ` data-fold="${foldId}"` +
+        ' role="button"' +
+        ' tabindex="0"' +
+        ' aria-expanded="false">' +
+        escapeHTML(title) +
+        '</div>\n' +
+        `<div class="fold-content" id="${foldId}">\n` +
+        renderedContent.trim() +
+        '\n</div>\n' +
+        '</div>\n\n'
+    );
 
         lastIndex = regex.lastIndex;
     }
