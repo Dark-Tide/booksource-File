@@ -89,21 +89,21 @@ const ICONS = {
 };
 
 function escapeHTML(value) {
-    return String(value ? ? '').replace(/[&<>"']/g, char => ({
-        '&': '&',
-        '<': '<',
-        '>': '>',
-        '"': '"',
-        "'": '''
-    } [char]));
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
 }
 
 function formatNumber(value) {
     const number = Number(value) || 0;
 
-    return number >= 1e4 ?
-        (number / 1e4).toFixed(1) + '万' :
-        number.toLocaleString();
+    return number >= 1e4
+        ? (number / 1e4).toFixed(1) + '万'
+        : number.toLocaleString();
 }
 
 function makeId(prefix) {
@@ -118,16 +118,17 @@ function safeImageUrl(value, baseUrl = globalConfig.baseUrl) {
     if (!value) return '';
 
     try {
-        const base = baseUrl ?
-            String(baseUrl).replace(/\/+$/, '') + '/' :
-            document.baseURI;
+        const base = baseUrl
+            ? String(baseUrl).replace(/\/+$/, '') + '/'
+            : document.baseURI;
 
         const url = new URL(String(value), base);
 
         if (url.protocol === 'https:' || url.protocol === 'http:') {
             return url.href;
         }
-    } catch {}
+    } catch {
+    }
 
     return '';
 }
@@ -209,20 +210,20 @@ function showToast(message, type = 'info', duration = 3000) {
         return;
     }
 
-    const safeType = ['success', 'error', 'info'].includes(type) ?
-        type :
-        'info';
+    const safeType = ['success', 'error', 'info'].includes(type)
+        ? type
+        : 'info';
 
     const toast = document.createElement('div');
     toast.className = `toast-message ${safeType}`;
 
     const icon = document.createElement('span');
     icon.className = 'toast-icon';
-    icon.textContent = safeType === 'success' ?
-        '✅' :
-        safeType === 'error' ?
-        '❎' :
-        'ℹ️';
+    icon.textContent = safeType === 'success'
+        ? '✅'
+        : safeType === 'error'
+            ? '❎'
+            : 'ℹ️';
 
     const text = document.createElement('span');
     text.textContent = String(message);
@@ -238,9 +239,8 @@ function showToast(message, type = 'info', duration = 3000) {
 
         toast.addEventListener(
             'transitionend',
-            () => toast.remove(), {
-                once: true
-            }
+            () => toast.remove(),
+            { once: true }
         );
         setTimeout(() => toast.remove(), 500);
     }, duration);
@@ -263,9 +263,7 @@ class SourceBadge extends HTMLElement {
     constructor() {
         super();
 
-        this.attachShadow({
-            mode: 'open'
-        });
+        this.attachShadow({ mode: 'open' });
 
         this._built = false;
         this._frame = 0;
@@ -302,9 +300,8 @@ class SourceBadge extends HTMLElement {
 
         window.addEventListener(
             'resize',
-            this._scheduleBound, {
-                passive: true
-            }
+            this._scheduleBound,
+            { passive: true }
         );
     }
 
@@ -338,7 +335,8 @@ class SourceBadge extends HTMLElement {
             badge = JSON.parse(
                 this.getAttribute('data-badge') || '{}'
             );
-        } catch {}
+        } catch {
+        }
 
         const name = String(badge.name || '');
 
@@ -442,9 +440,9 @@ class SourceBadge extends HTMLElement {
 
         const sourceStyle = document.createElement('style');
 
-        const customCSS = typeof badge.badge_css === 'string' ?
-            badge.badge_css :
-            '';
+        const customCSS = typeof badge.badge_css === 'string'
+            ? badge.badge_css
+            : '';
         sourceStyle.textContent = customCSS;
 
         this._sourceRoot.append(
@@ -452,9 +450,9 @@ class SourceBadge extends HTMLElement {
             sourceStyle
         );
 
-        const customHTML = typeof badge.badge_html === 'string' ?
-            badge.badge_html.trim() :
-            '';
+        const customHTML = typeof badge.badge_html === 'string'
+            ? badge.badge_html.trim()
+            : '';
 
         const imageUrl = safeImageUrl(
             badge.image_url,
@@ -602,9 +600,9 @@ class SourceBadge extends HTMLElement {
             return;
         }
 
-        const options = this.getAttribute('size') === 'reply' ?
-            BADGE_OPTIONS.reply :
-            BADGE_OPTIONS.comment;
+        const options = this.getAttribute('size') === 'reply'
+            ? BADGE_OPTIONS.reply
+            : BADGE_OPTIONS.comment;
 
         let availableWidth = options.maxWidth;
         const parent = this.parentElement;
@@ -612,9 +610,9 @@ class SourceBadge extends HTMLElement {
         if (parent && parent.clientWidth > 0) {
             const style = getComputedStyle(parent);
 
-            availableWidth = parent.clientWidth -
-                (parseFloat(style.paddingLeft) || 0) -
-                (parseFloat(style.paddingRight) || 0);
+            availableWidth = parent.clientWidth
+                - (parseFloat(style.paddingLeft) || 0)
+                - (parseFloat(style.paddingRight) || 0);
         }
 
         const maxWidth = Math.max(
@@ -671,8 +669,8 @@ async function blockUser(userId, btnElement) {
     }
 
     if (!confirm(
-            '确定要屏蔽该用户吗？屏蔽后将无法看到其后续发言。'
-        )) {
+        '确定要屏蔽该用户吗？屏蔽后将无法看到其后续发言。'
+    )) {
         return;
     }
 
@@ -686,7 +684,8 @@ async function blockUser(userId, btnElement) {
         const response = await fetch(
             `${globalConfig.baseUrl}/api/v2/users/${
                 encodeURIComponent(userId)
-            }/block`, {
+            }/block`,
+            {
                 method: 'POST',
                 headers
             }
@@ -748,9 +747,8 @@ function initAvatarLongPress(container) {
 
         avatar.addEventListener(
             'touchstart',
-            startTimer, {
-                passive: true
-            }
+            startTimer,
+            { passive: true }
         );
 
         avatar.addEventListener('touchend', clearTimer);
@@ -831,7 +829,8 @@ async function loadBookCard(
             const promise = requestJSON(
                 `${baseUrl}/api/novel/detail.php?id=${
                     encodeURIComponent(bookId)
-                }`, {
+                }`,
+                {
                     headers: createAuthHeaders(userToken)
                 }
             ).then(result => {
@@ -889,9 +888,9 @@ function renderBookCard(
     const authorName = String(bookData.authorName || '未知');
     const description = String(bookData.description || '');
 
-    const tags = Array.isArray(bookData.tags) ?
-        bookData.tags :
-        [];
+    const tags = Array.isArray(bookData.tags)
+        ? bookData.tags
+        : [];
 
     const hasTags = showTags && tags.length > 0;
     const hasBio = showBio && description.trim().length > 0;
@@ -1002,9 +1001,7 @@ function renderBookCard(
             encodeURIComponent(svg);
     };
 
-    image.addEventListener('error', setFallback, {
-        once: true
-    });
+    image.addEventListener('error', setFallback, { once: true });
 
     if (!photoUrl) {
         setFallback();
@@ -1071,7 +1068,7 @@ async function processFoldTags(text, baseUrl, userToken) {
 }
 
 async function renderMarkdown(text, baseUrl, userToken) {
-    const input = String(text ? ? '');
+    const input = String(text ?? '');
 
     const withBooks = await processBookTags(input);
     const withFolds = await processFoldTags(
@@ -1088,9 +1085,7 @@ async function renderMarkdown(text, baseUrl, userToken) {
     }
 
     return DOMPurify.sanitize(html, {
-        USE_PROFILES: {
-            html: true
-        },
+        USE_PROFILES: { html: true },
 
         FORBID_TAGS: [
             'style',
@@ -1124,9 +1119,9 @@ async function getComment(comments, baseUrl, userToken) {
         depth = 0,
         rootId = null
     ) {
-        const currentRootId = depth === 0 ?
-            comment.id :
-            rootId;
+        const currentRootId = depth === 0
+            ? comment.id
+            : rootId;
 
         const authorName = String(
             comment.authorName || '匿名用户'
@@ -1148,41 +1143,41 @@ async function getComment(comments, baseUrl, userToken) {
             baseUrl
         );
 
-        const avatarClass = isReply ?
-            'reply-avatar' :
-            'user-avatar';
+        const avatarClass = isReply
+            ? 'reply-avatar'
+            : 'user-avatar';
 
-        const avatarContainerClass = isReply ?
-            'reply-avatar-container' :
-            'user-avatar-container';
+        const avatarContainerClass = isReply
+            ? 'reply-avatar-container'
+            : 'user-avatar-container';
 
-        const infoClass = isReply ?
-            'reply-info' :
-            'user-info';
+        const infoClass = isReply
+            ? 'reply-info'
+            : 'user-info';
 
-        const authorClass = isReply ?
-            'reply-author' :
-            'comment-author';
+        const authorClass = isReply
+            ? 'reply-author'
+            : 'comment-author';
 
-        const timeClass = isReply ?
-            'reply-time' :
-            'comment-time';
+        const timeClass = isReply
+            ? 'reply-time'
+            : 'comment-time';
 
-        const headerClass = isReply ?
-            'reply-header' :
-            'comment-header';
+        const headerClass = isReply
+            ? 'reply-header'
+            : 'comment-header';
 
-        const avatarContent = avatarUrl ?
-            `
+        const avatarContent = avatarUrl
+            ? `
                 <img
                     src="${escapeHTML(avatarUrl)}"
                     alt="${escapeHTML(authorName)}"
                 >
-            ` :
-            escapeHTML(initial);
-
-        const frameHTML = frameUrl ?
             `
+            : escapeHTML(initial);
+
+        const frameHTML = frameUrl
+            ? `
                 <img
                     src="${escapeHTML(frameUrl)}"
                     class="${
@@ -1190,18 +1185,18 @@ async function getComment(comments, baseUrl, userToken) {
                     }"
                     alt=""
                 >
-            ` :
-            '';
-
-        const blockHTML = !isOwnComment && currentUserId !== null ?
             `
+            : '';
+
+        const blockHTML = !isOwnComment && currentUserId !== null
+            ? `
                 <button
                     class="block-btn"
                     data-user-id="${escapeHTML(comment.authorId)}"
                     type="button"
                 >屏蔽</button>
-            ` :
-            '';
+            `
+            : '';
 
         let badgesHTML = '';
 
@@ -1231,9 +1226,9 @@ async function getComment(comments, baseUrl, userToken) {
             `;
         }
 
-        const reactions = Array.isArray(comment.userReactions) ?
-            comment.userReactions :
-            [];
+        const reactions = Array.isArray(comment.userReactions)
+            ? comment.userReactions
+            : [];
 
         const helpfulActive = reactions.includes('helpful');
         const notHelpfulActive = reactions.includes('not_helpful');
@@ -1286,16 +1281,16 @@ async function getComment(comments, baseUrl, userToken) {
             userToken
         );
 
-        const replyToHTML = isReply && comment.replyToName ?
-            `
+        const replyToHTML = isReply && comment.replyToName
+            ? `
                 <div class="reply-to-tag">
                     @ ${escapeHTML(comment.replyToName)}
                 </div>
-            ` :
-            '';
-
-        const deleteHTML = isOwnComment ?
             `
+            : '';
+
+        const deleteHTML = isOwnComment
+            ? `
                 <button
                     class="action-btn delete ${
                         isReply
@@ -1309,8 +1304,8 @@ async function getComment(comments, baseUrl, userToken) {
                     }
                     type="button"
                 >🗑️ 删除</button>
-            ` :
-            '';
+            `
+            : '';
 
         const actionsHTML = `
             <div class="${isReply ? 'reply-actions' : 'comment-actions'}">
@@ -1331,9 +1326,9 @@ async function getComment(comments, baseUrl, userToken) {
 
         let repliesHTML = '';
 
-        const replies = Array.isArray(comment.replies) ?
-            comment.replies :
-            [];
+        const replies = Array.isArray(comment.replies)
+            ? comment.replies
+            : [];
 
         if (replies.length > 0) {
             const replyItems = await Promise.all(
@@ -1438,9 +1433,9 @@ async function getReview(
 
     const commentType = chapterId ? 'chapter' : 'book';
 
-    const chapterParam = chapterId ?
-        `&chapter_id=${encodeURIComponent(chapterId)}` :
-        '';
+    const chapterParam = chapterId
+        ? `&chapter_id=${encodeURIComponent(chapterId)}`
+        : '';
 
     const apiUrl =
         `${baseUrl}/api/comment/list.php` +
@@ -1459,18 +1454,17 @@ async function getReview(
         const headers = createAuthHeaders(userToken);
 
         const firstData = await requestJSON(
-            `${apiUrl}&page=1`, {
-                headers
-            }
+            `${apiUrl}&page=1`,
+            { headers }
         );
 
         if (firstData.success === false) {
             throw new Error(firstData.message || '加载失败');
         }
 
-        let allComments = Array.isArray(firstData.comments) ?
-            firstData.comments :
-            [];
+        let allComments = Array.isArray(firstData.comments)
+            ? firstData.comments
+            : [];
 
         const totalPages = Math.max(
             1,
@@ -1479,9 +1473,8 @@ async function getReview(
 
         for (let page = 2; page <= totalPages; page++) {
             const data = await requestJSON(
-                `${apiUrl}&page=${page}`, {
-                    headers
-                }
+                `${apiUrl}&page=${page}`,
+                { headers }
             );
 
             if (data.success === false) {
@@ -1850,9 +1843,9 @@ function openInputPanel(mode, commentId = null, authorName = null) {
     previewVersion++;
 
     if (mode === 'comment') {
-        title.textContent = globalConfig.chapterId ?
-            '发表章评' :
-            '发表书评';
+        title.textContent = globalConfig.chapterId
+            ? '发表章评'
+            : '发表书评';
 
         subtitle.textContent = '分享你的想法';
     } else {
@@ -2035,16 +2028,13 @@ async function deleteEntry(id, isReply) {
 
         headers['Content-Type'] = 'application/json';
 
-        const body = isReply ?
-            {
-                reply_id: id
-            } :
-            {
-                comment_id: id
-            };
+        const body = isReply
+            ? { reply_id: id }
+            : { comment_id: id };
 
         const result = await requestJSON(
-            `${globalConfig.baseUrl}/api/comment/delete.php`, {
+            `${globalConfig.baseUrl}/api/comment/delete.php`,
+            {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(body)
@@ -2149,7 +2139,8 @@ async function handleReaction(
         }
 
         const result = await requestJSON(
-            `${globalConfig.baseUrl}/api/comment/react.php`, {
+            `${globalConfig.baseUrl}/api/comment/react.php`,
+            {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(body)
@@ -2172,11 +2163,11 @@ async function handleReaction(
         let notHelpfulActive = notHelpfulButton.classList.contains('active');
 
         const serverReactions =
-            Array.isArray(result.userReactions) ?
-            result.userReactions :
-            Array.isArray(result.user_reactions) ?
-            result.user_reactions :
-            null;
+            Array.isArray(result.userReactions)
+                ? result.userReactions
+                : Array.isArray(result.user_reactions)
+                    ? result.user_reactions
+                    : null;
 
         if (serverReactions) {
             helpfulActive = serverReactions.includes('helpful');
@@ -2295,23 +2286,20 @@ function bindInteractiveElements(container) {
 
         spoiler.addEventListener(
             'touchstart',
-            spoilerTouchStart, {
-                passive: true
-            }
+            spoilerTouchStart,
+            { passive: true }
         );
 
         spoiler.addEventListener(
             'touchmove',
-            spoilerTouchMove, {
-                passive: true
-            }
+            spoilerTouchMove,
+            { passive: true }
         );
 
         spoiler.addEventListener(
             'touchend',
-            spoilerTouchEnd, {
-                passive: false
-            }
+            spoilerTouchEnd,
+            { passive: false }
         );
 
         spoiler.addEventListener(
@@ -2328,9 +2316,8 @@ function bindInteractiveElements(container) {
 
         header.addEventListener(
             'touchend',
-            toggleFoldTouchEnd, {
-                passive: false
-            }
+            toggleFoldTouchEnd,
+            { passive: false }
         );
 
         header.addEventListener('keydown', event => {
@@ -2350,9 +2337,8 @@ function bindInteractiveElements(container) {
 
             button.addEventListener(
                 'touchend',
-                toggleRepliesTouchEnd, {
-                    passive: false
-                }
+                toggleRepliesTouchEnd,
+                { passive: false }
             );
 
             button.addEventListener('keydown', event => {
@@ -2564,9 +2550,9 @@ function showImageViewer(target) {
 
 function initImageViewer() {
     document.addEventListener('click', event => {
-        const path = event.composedPath ?
-            event.composedPath() :
-            [event.target];
+        const path = event.composedPath
+            ? event.composedPath()
+            : [event.target];
 
         const target = path.find(node => {
             return node instanceof Element &&
@@ -2601,7 +2587,7 @@ function initImageViewer() {
         if (
             target.id === 'coverImage' &&
             !document.getElementById('coverBox')
-            .classList.contains('expanded')
+                .classList.contains('expanded')
         ) {
             return;
         }
@@ -2631,9 +2617,8 @@ document.addEventListener(
         touchStartX = event.touches[0].clientX;
         touchStartY = event.touches[0].clientY;
         hasMoved = false;
-    }, {
-        passive: true
-    }
+    },
+    { passive: true }
 );
 
 document.addEventListener(
@@ -2655,9 +2640,8 @@ document.addEventListener(
         ) {
             hasMoved = true;
         }
-    }, {
-        passive: true
-    }
+    },
+    { passive: true }
 );
 
 document.addEventListener(
@@ -2670,9 +2654,8 @@ document.addEventListener(
 
         pressTimer = null;
         avatarPressTimer = null;
-    }, {
-        passive: true
-    }
+    },
+    { passive: true }
 );
 
 function initComments(config) {
