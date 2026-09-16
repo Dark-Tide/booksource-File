@@ -4,7 +4,6 @@ marked.setOptions({
 });
 
 let pressTimer = null;
-let avatarPressTimer = null;
 let startTime = 0;
 let touchStartX = 0;
 let touchStartY = 0;
@@ -28,7 +27,6 @@ let renderVersion = 0;
 let reviewVersion = 0;
 let previewVersion = 0;
 let uiInitialized = false;
-let avatarDismissBound = false;
 
 const BADGE_OPTIONS = {
     baseFontSize: 14,
@@ -204,46 +202,46 @@ async function requestJSON(url, options = {}) {
 
 function showToast(message, type = 'info', duration = 3000) {
     const container = document.getElementById('toastContainer');
-
     if (!container) {
         alert(message);
         return;
     }
-
-    const safeType = ['success', 'error', 'info'].includes(type)
-        ? type
-        : 'info';
-
+    const safeType = ['success', 'error', 'info'].includes(type) ? type : 'info';
     const toast = document.createElement('div');
     toast.className = `toast-message ${safeType}`;
+    toast.setAttribute('role', safeType === 'error' ? 'alert' : 'status');
+    toast.setAttribute('aria-atomic', 'true');
 
     const icon = document.createElement('span');
     icon.className = 'toast-icon';
-    icon.textContent = safeType === 'success'
-        ? '✅'
-        : safeType === 'error'
-            ? '❎'
-            : 'ℹ️';
-
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = safeType === 'success' ? '✓' : safeType === 'error' ? '!' : 'i';
     const text = document.createElement('span');
+    text.className = 'toast-text';
     text.textContent = String(message);
-
-    toast.append(icon, text);
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'toast-close';
+    dismiss.setAttribute('aria-label', '关闭提示');
+    dismiss.textContent = '×';
+    toast.append(icon, text, dismiss);
     container.appendChild(toast);
 
+    let closed = false;
+    let timer;
+    const close = () => {
+        if (closed) return;
+        closed = true;
+        clearTimeout(timer);
+        toast.classList.remove('show');
+        toast.classList.add('hide');
+        setTimeout(() => toast.remove(), 280);
+    };
     void toast.offsetWidth;
     toast.classList.add('show');
-
-    setTimeout(() => {
-        toast.classList.remove('show');
-
-        toast.addEventListener(
-            'transitionend',
-            () => toast.remove(),
-            { once: true }
-        );
-        setTimeout(() => toast.remove(), 500);
-    }, duration);
+    const milliseconds = Number(duration);
+    timer = setTimeout(close, Number.isFinite(milliseconds) ? Math.max(0, milliseconds) : 3000);
+    toast.addEventListener('click', close);
 }
 
 function refreshReview() {
@@ -662,106 +660,40 @@ function renderSourceBadge(badge, isReply) {
     `;
 }
 
+const BLOCK_ICON = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <circle cx="12" cy="9" r="2.2" fill="currentColor"/>
+        <path d="M7.8 17.2c.8-2.1 2.2-3.1 4.2-3.1s3.4 1 4.2 3.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M5.2 5.2 18.8 18.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+`;
+
 async function blockUser(userId, btnElement) {
+    if (btnElement?.disabled) return;
     if (!globalConfig.userToken) {
         showToast('请先登录', 'error');
         return;
     }
-
     if (!confirm(
-        '确定要屏蔽该用户吗？屏蔽后将无法看到其后续发言。'
-    )) {
-        return;
-    }
+        '确定要屏蔽「' + (btnElement?.dataset.userName || '该用户') +
+        '」吗？\n\n屏蔽后将无法看到其后续发言。'
+    )) return;
 
+    if (btnElement) btnElement.disabled = true;
     try {
-        const headers = createAuthHeaders(
-            globalConfig.userToken
-        );
-
-        headers['Content-Type'] = 'application/json';
-
         const response = await fetch(
-            `${globalConfig.baseUrl}/api/v2/users/${
-                encodeURIComponent(userId)
-            }/block`,
-            {
-                method: 'POST',
-                headers
-            }
+            `${globalConfig.baseUrl}/api/v2/users/${encodeURIComponent(userId)}/block`,
+            { method: 'POST', headers: createAuthHeaders(globalConfig.userToken) }
         );
-
-        if (!response.ok) {
-            throw new Error(`请求失败（HTTP ${response.status}）`);
-        }
-
+        if (!response.ok) throw new Error(`请求失败（HTTP ${response.status}）`);
         showToast('屏蔽成功', 'success');
-        btnElement?.classList.remove('show');
-
         await refreshReview();
     } catch (error) {
         showToast('屏蔽失败: ' + error.message, 'error');
+    } finally {
+        if (btnElement) btnElement.disabled = false;
     }
-}
-
-function initAvatarLongPress(container) {
-    if (!avatarDismissBound) {
-        avatarDismissBound = true;
-
-        document.addEventListener('click', event => {
-            if (!event.target.closest('.block-btn')) {
-                document.querySelectorAll('.block-btn.show')
-                    .forEach(button => {
-                        button.classList.remove('show');
-                    });
-            }
-        });
-    }
-
-    container.querySelectorAll(
-        '.user-avatar-container, .reply-avatar-container'
-    ).forEach(avatar => {
-        if (avatar.dataset.longPressBound) return;
-        avatar.dataset.longPressBound = '1';
-
-        const blockButton = avatar.querySelector('.block-btn');
-        if (!blockButton) return;
-
-        const clearTimer = () => {
-            clearTimeout(avatarPressTimer);
-            avatarPressTimer = null;
-        };
-
-        const startTimer = () => {
-            clearTimer();
-
-            avatarPressTimer = setTimeout(() => {
-                document.querySelectorAll('.block-btn.show')
-                    .forEach(button => {
-                        button.classList.remove('show');
-                    });
-
-                blockButton.classList.add('show');
-            }, 600);
-        };
-
-        avatar.addEventListener(
-            'touchstart',
-            startTimer,
-            { passive: true }
-        );
-
-        avatar.addEventListener('touchend', clearTimer);
-        avatar.addEventListener('touchcancel', clearTimer);
-        avatar.addEventListener('touchmove', clearTimer);
-
-        avatar.addEventListener('mousedown', event => {
-            if (event.button === 0) startTimer();
-        });
-
-        avatar.addEventListener('mouseup', clearTimer);
-        avatar.addEventListener('mouseleave', clearTimer);
-    });
 }
 
 async function processBookTags(text) {
@@ -1189,13 +1121,16 @@ async function getComment(comments, baseUrl, userToken) {
             `
             : '';
 
-        const blockHTML = !isOwnComment && currentUserId !== null
+        const blockHTML = !isOwnComment && currentUserId !== null && comment.authorId != null
             ? `
                 <button
                     class="block-btn"
                     data-user-id="${escapeHTML(comment.authorId)}"
+                    data-user-name="${escapeHTML(authorName)}"
                     type="button"
-                >屏蔽</button>
+                    aria-label="屏蔽 ${escapeHTML(authorName)}"
+                    title="屏蔽该用户"
+                >${BLOCK_ICON}</button>
             `
             : '';
 
@@ -1387,13 +1322,15 @@ async function getComment(comments, baseUrl, userToken) {
                         </div>
 
                         ${frameHTML}
-                        ${blockHTML}
                     </div>
 
                     <div class="${infoClass}">
-                        <span class="${authorClass}">
-                            ${escapeHTML(authorName)}
-                        </span>
+                        <div class="author-line">
+                            <span class="${authorClass}">
+                                ${escapeHTML(authorName)}
+                            </span>
+                            ${blockHTML}
+                        </div>
 
                         <span class="${timeClass}">
                             ${escapeHTML(comment.createdAt || '')}
@@ -2250,6 +2187,7 @@ function bindActionButtons(
             button.addEventListener('click', event => {
                 event.stopPropagation();
 
+                event.preventDefault();
                 blockUser(
                     button.dataset.userId,
                     button
@@ -2350,7 +2288,6 @@ function bindInteractiveElements(container) {
             });
         });
 
-    initAvatarLongPress(container);
     hydrateBookCards(container);
 }
 
@@ -2651,10 +2588,8 @@ document.addEventListener(
         hasMoved = true;
 
         clearTimeout(pressTimer);
-        clearTimeout(avatarPressTimer);
 
         pressTimer = null;
-        avatarPressTimer = null;
     },
     { passive: true }
 );
