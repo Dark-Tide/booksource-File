@@ -428,18 +428,11 @@ button {
     padding: 4px 2px 6px;
 }
 
-.badges-container::-webkit-scrollbar {
-    height: 2px;
-}
-
+.badges-container::-webkit-scrollbar,
 .reply-badges-container::-webkit-scrollbar {
-    height: 1px;
-}
-
-.badges-container::-webkit-scrollbar-thumb,
-.reply-badges-container::-webkit-scrollbar-thumb {
-    background: #94a3b8;
-    border-radius: 9999px;
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 source-badge {
