@@ -1012,7 +1012,6 @@ source-badge {
     position: relative;
 }
 
-/* 居中回复胶囊：48px 触控高度，36px 视觉高度 */
 .replies-toggle {
     display: flex;
     align-items: center;
