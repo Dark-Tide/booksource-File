@@ -32,10 +32,12 @@ let uiInitialized = false;
 
 const BADGE_OPTIONS = {
     baseFontSize: 14,
+
     comment: {
         maxHeight: 21,
         maxWidth: 142.5
     },
+
     reply: {
         maxHeight: 16.5,
         maxWidth: 112.5
@@ -63,6 +65,7 @@ const ICONS = {
             </svg>
         `
     },
+
     not_helpful: {
         outline: `
             <svg viewBox="0 0 24 24"
@@ -201,16 +204,11 @@ async function requestJSON(url, options = {}) {
 
 function showToast(message, type = 'info', duration = 3000) {
     const container = document.getElementById('toastContainer');
-
     if (!container) {
         alert(message);
         return;
     }
-
-    const safeType = ['success', 'error', 'info'].includes(type)
-        ? type
-        : 'info';
-
+    const safeType = ['success', 'error', 'info'].includes(type) ? type : 'info';
     const toast = document.createElement('div');
     toast.className = `toast-message ${safeType}`;
     toast.setAttribute('role', safeType === 'error' ? 'alert' : 'status');
@@ -219,51 +217,32 @@ function showToast(message, type = 'info', duration = 3000) {
     const icon = document.createElement('span');
     icon.className = 'toast-icon';
     icon.setAttribute('aria-hidden', 'true');
-    icon.textContent = safeType === 'success'
-        ? '✓'
-        : safeType === 'error'
-            ? '!'
-            : 'i';
-
+    icon.textContent = safeType === 'success' ? '✓' : safeType === 'error' ? '!' : 'i';
     const text = document.createElement('span');
     text.className = 'toast-text';
     text.textContent = String(message);
-
     const dismiss = document.createElement('button');
     dismiss.type = 'button';
     dismiss.className = 'toast-close';
     dismiss.setAttribute('aria-label', '关闭提示');
     dismiss.textContent = '×';
-
     toast.append(icon, text, dismiss);
     container.appendChild(toast);
 
     let closed = false;
     let timer;
-
     const close = () => {
         if (closed) return;
-
         closed = true;
         clearTimeout(timer);
         toast.classList.remove('show');
         toast.classList.add('hide');
-
         setTimeout(() => toast.remove(), 280);
     };
-
     void toast.offsetWidth;
     toast.classList.add('show');
-
     const milliseconds = Number(duration);
-
-    timer = setTimeout(
-        close,
-        Number.isFinite(milliseconds)
-            ? Math.max(0, milliseconds)
-            : 3000
-    );
-
+    timer = setTimeout(close, Number.isFinite(milliseconds) ? Math.max(0, milliseconds) : 3000);
     toast.addEventListener('click', close);
 }
 
@@ -464,7 +443,6 @@ class SourceBadge extends HTMLElement {
         const customCSS = typeof badge.badge_css === 'string'
             ? badge.badge_css
             : '';
-
         sourceStyle.textContent = customCSS;
 
         this._sourceRoot.append(
@@ -579,7 +557,6 @@ class SourceBadge extends HTMLElement {
                 1000
             );
         }
-
         this._mutationObserver = new MutationObserver(
             this._scheduleBound
         );
@@ -609,7 +586,6 @@ class SourceBadge extends HTMLElement {
 
     fit() {
         if (!this._source) return;
-
         const width = Math.max(
             this._source.offsetWidth,
             this._source.scrollWidth
@@ -649,7 +625,6 @@ class SourceBadge extends HTMLElement {
             options.maxHeight / height,
             maxWidth / width
         );
-
         this._scaler.style.transform = `scale(${scale})`;
 
         const displayWidth = `${width * scale}px`;
@@ -698,32 +673,22 @@ const BLOCK_ICON = `
 
 async function blockUser(userId, btnElement) {
     if (btnElement?.disabled) return;
-
     if (!globalConfig.userToken) {
         showToast('请先登录', 'error');
         return;
     }
-
     if (!confirm(
         '确定要屏蔽「' + (btnElement?.dataset.userName || '该用户') +
         '」吗？\n\n屏蔽后将无法看到其后续发言。'
     )) return;
 
     if (btnElement) btnElement.disabled = true;
-
     try {
         const response = await fetch(
             `${globalConfig.baseUrl}/api/v2/users/${encodeURIComponent(userId)}/block`,
-            {
-                method: 'POST',
-                headers: createAuthHeaders(globalConfig.userToken)
-            }
+            { method: 'POST', headers: createAuthHeaders(globalConfig.userToken) }
         );
-
-        if (!response.ok) {
-            throw new Error(`请求失败（HTTP ${response.status}）`);
-        }
-
+        if (!response.ok) throw new Error(`请求失败（HTTP ${response.status}）`);
         showToast('屏蔽成功', 'success');
         await refreshReview();
     } catch (error) {
@@ -761,7 +726,6 @@ function hydrateBookCards(container) {
         '.book-card-placeholder[data-book-id]'
     ).forEach(element => {
         if (element.dataset.bookLoaded) return;
-
         element.dataset.bookLoaded = '1';
 
         loadBookCard(
@@ -1016,20 +980,20 @@ async function processFoldTags(text, baseUrl, userToken) {
         );
 
         resultParts.push(
-            '\n\n' +
-            '<div class="fold-container">\n' +
-            '<div class="fold-header"' +
-            ` data-fold="${foldId}"` +
-            ' role="button"' +
-            ' tabindex="0"' +
-            ' aria-expanded="false">' +
-            escapeHTML(title) +
-            '</div>\n' +
-            `<div class="fold-content" id="${foldId}">\n` +
-            renderedContent.trim() +
-            '\n</div>\n' +
-            '</div>\n\n'
-        );
+        '\n\n' +
+        '<div class="fold-container">\n' +
+        '<div class="fold-header"' +
+        ` data-fold="${foldId}"` +
+        ' role="button"' +
+        ' tabindex="0"' +
+        ' aria-expanded="false">' +
+        escapeHTML(title) +
+        '</div>\n' +
+        `<div class="fold-content" id="${foldId}">\n` +
+        renderedContent.trim() +
+        '\n</div>\n' +
+        '</div>\n\n'
+    );
 
         lastIndex = regex.lastIndex;
     }
@@ -1042,7 +1006,6 @@ async function renderMarkdown(text, baseUrl, userToken) {
     const input = String(text ?? '');
 
     const withBooks = await processBookTags(input);
-
     const withFolds = await processFoldTags(
         withBooks,
         baseUrl,
@@ -1069,8 +1032,8 @@ async function renderMarkdown(text, baseUrl, userToken) {
             'meta',
             'base'
         ],
-
         FORBID_ATTR: ['style'],
+
         ALLOW_DATA_ATTR: true
     });
 }
@@ -1160,21 +1123,18 @@ async function getComment(comments, baseUrl, userToken) {
             `
             : '';
 
-        const blockHTML =
-            !isOwnComment &&
-            currentUserId !== null &&
-            comment.authorId != null
-                ? `
-                    <button
-                        class="block-btn"
-                        data-user-id="${escapeHTML(comment.authorId)}"
-                        data-user-name="${escapeHTML(authorName)}"
-                        type="button"
-                        aria-label="屏蔽 ${escapeHTML(authorName)}"
-                        title="屏蔽该用户"
-                    >${BLOCK_ICON}</button>
-                `
-                : '';
+        const blockHTML = !isOwnComment && currentUserId !== null && comment.authorId != null
+            ? `
+                <button
+                    class="block-btn"
+                    data-user-id="${escapeHTML(comment.authorId)}"
+                    data-user-name="${escapeHTML(authorName)}"
+                    type="button"
+                    aria-label="屏蔽 ${escapeHTML(authorName)}"
+                    title="屏蔽该用户"
+                >${BLOCK_ICON}</button>
+            `
+            : '';
 
         let badgesHTML = '';
 
@@ -1323,18 +1283,25 @@ async function getComment(comments, baseUrl, userToken) {
 
                 repliesHTML = `
                     <div class="replies-toggle">
-                        <div
+                        <button
                             class="replies-toggle-btn"
+                            type="button"
                             data-replies="${repliesId}"
-                            role="button"
-                            tabindex="0"
+                            aria-controls="${repliesId}"
                             aria-expanded="false"
                         >
-                            <div class="triangle"></div>
-                            <div class="reply-count">
-                                ${replies.length}
-                            </div>
-                        </div>
+                            <span class="replies-toggle-pill">
+                                <span class="replies-toggle-label">展开回复</span>
+                                <span class="reply-count">${replies.length}</span>
+                                <svg class="replies-toggle-arrow"
+                                     viewBox="0 0 24 24" fill="none"
+                                     stroke="currentColor" stroke-width="1.8"
+                                     stroke-linecap="round" stroke-linejoin="round"
+                                     aria-hidden="true" focusable="false">
+                                    <path d="m6 9 6 6 6-6"></path>
+                                </svg>
+                            </span>
+                        </button>
                     </div>
 
                     <div
@@ -2228,8 +2195,8 @@ function bindActionButtons(
         .forEach(button => {
             button.addEventListener('click', event => {
                 event.stopPropagation();
-                event.preventDefault();
 
+                event.preventDefault();
                 blockUser(
                     button.dataset.userId,
                     button
@@ -2261,7 +2228,6 @@ function bindActionButtons(
 function bindInteractiveElements(container) {
     container.querySelectorAll('.spoiler').forEach(spoiler => {
         if (spoiler.dataset.bound) return;
-
         spoiler.dataset.bound = '1';
 
         spoiler.addEventListener('click', revealSpoilerClick);
@@ -2292,7 +2258,6 @@ function bindInteractiveElements(container) {
 
     container.querySelectorAll('.fold-header').forEach(header => {
         if (header.dataset.bound) return;
-
         header.dataset.bound = '1';
 
         header.addEventListener('click', toggleFoldClick);
@@ -2314,7 +2279,6 @@ function bindInteractiveElements(container) {
     container.querySelectorAll('.replies-toggle-btn')
         .forEach(button => {
             if (button.dataset.bound) return;
-
             button.dataset.bound = '1';
 
             button.addEventListener('click', toggleRepliesClick);
@@ -2324,13 +2288,6 @@ function bindInteractiveElements(container) {
                 toggleRepliesTouchEnd,
                 { passive: false }
             );
-
-            button.addEventListener('keydown', event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    button.click();
-                }
-            });
         });
 
     hydrateBookCards(container);
@@ -2459,25 +2416,20 @@ function toggleFoldTouchEnd(event) {
 }
 
 function toggleReplies(button) {
-    const container = document.getElementById(
-        button.dataset.replies
-    );
-
+    const container = document.getElementById(button.dataset.replies);
     if (!container) return;
 
     const expanded = !button.classList.contains('expanded');
-
     button.classList.toggle('expanded', expanded);
     button.setAttribute('aria-expanded', String(expanded));
 
-    const wasVisible = container.classList.contains('expanded');
+    const label = button.querySelector('.replies-toggle-label');
+    if (label) label.textContent = expanded ? '收起回复' : '展开回复';
 
-    const currentOpacity = wasVisible
+    const currentOpacity = container.classList.contains('expanded')
         ? Number.parseFloat(getComputedStyle(container).opacity)
         : 0;
-
     const previousAnimation = replyAnimations.get(container);
-
     if (previousAnimation) {
         previousAnimation.cancel();
         replyAnimations.delete(container);
@@ -2489,17 +2441,14 @@ function toggleReplies(button) {
 
     if (reduceMotion || typeof container.animate !== 'function') {
         container.classList.toggle('expanded', expanded);
-
         if (expanded) {
             container.querySelectorAll('source-badge')
                 .forEach(badge => badge.scheduleFit?.());
         }
-
         return;
     }
 
     container.classList.add('expanded');
-
     if (expanded) {
         container.querySelectorAll('source-badge')
             .forEach(badge => badge.scheduleFit?.());
@@ -2507,25 +2456,17 @@ function toggleReplies(button) {
 
     const animation = container.animate(
         [
-            { opacity: currentOpacity },
+            { opacity: Number.isFinite(currentOpacity) ? currentOpacity : 1 },
             { opacity: expanded ? 1 : 0 }
         ],
-        {
-            duration: 240,
-            easing: 'ease-in-out',
-            fill: 'forwards'
-        }
+        { duration: 240, easing: 'ease-in-out', fill: 'forwards' }
     );
-
     replyAnimations.set(container, animation);
 
     animation.onfinish = () => {
         if (replyAnimations.get(container) !== animation) return;
-
         container.classList.toggle('expanded', expanded);
-
         replyAnimations.delete(container);
-
         animation.cancel();
     };
 }
@@ -2534,6 +2475,7 @@ function toggleRepliesClick(event) {
     const button = event.currentTarget;
 
     if (
+        event.detail !== 0 &&
         Date.now() <
         Number(button.dataset.suppressClickUntil || 0)
     ) {
@@ -2687,6 +2629,7 @@ document.addEventListener(
         hasMoved = true;
 
         clearTimeout(pressTimer);
+
         pressTimer = null;
     },
     { passive: true }
