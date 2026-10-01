@@ -623,7 +623,7 @@
                 if (!width || !height) {
                     return;
                 }
-                const options = BADGE_OPTIONS.comment; // Using 'comment' options as default for user badges
+                const options = BADGE_OPTIONS.comment;
 
                 let availableWidth = options.maxWidth;
                 const parent = this.parentElement;
@@ -662,7 +662,7 @@
                 image_url: badge.image_url || '',
                 badge_html: badge.badge_html || '',
                 badge_css: badge.badge_css || '',
-                base_url: '' // Assuming badge_image_url is absolute or relative to document.baseURI
+                base_url: ''
             };
 
             return `
@@ -757,11 +757,11 @@
             tick();
             countdownTimer = setInterval(tick, 1000);
         }
-        
+
         async function loadBlockedUsers(page = 1) {
             if (isBlockLoading) return;
             isBlockLoading = true;
-            
+
             const loadBtn = document.getElementById('loadMoreBlockBtn');
             if (loadBtn) {
                 loadBtn.disabled = true;
@@ -775,19 +775,19 @@
                         'Accept': 'application/json'
                     }
                 });
-                
+
                 if (response.ok) {
                     const resData = await response.json();
                     if (resData.success && resData.data) {
                         const newUsers = resData.data.blocked_users || [];
                         const pagination = resData.data.pagination || { page: 1, pages: 1 };
-                        
+
                         if (page === 1) {
                             blockedUsers = newUsers;
                         } else {
                             blockedUsers.push(...newUsers);
                         }
-                        
+
                         blockCurrentPage = pagination.page;
                         blockTotalPages = pagination.pages;
                     }
@@ -799,13 +799,13 @@
                 renderBlockedList();
             }
         }
-        
+
         function loadNextBlockPage() {
             if (blockCurrentPage < blockTotalPages) {
                 loadBlockedUsers(blockCurrentPage + 1);
             }
         }
-        
+
         async function unblockUser(userId, btnEl) {
             if (confirm('确定要解除对该用户的屏蔽吗？')) {
                 if (btnEl) {
@@ -820,7 +820,7 @@
                             'Accept': 'application/json'
                         }
                     });
-                    
+
                     if (response.status === 204 || response.ok) {
                         blockedUsers = blockedUsers.filter(user => user.id !== userId);
                         renderBlockedList();
@@ -867,7 +867,7 @@
                     </div>
                 `;
             }).join('');
-            
+
             if (blockCurrentPage < blockTotalPages) {
                 listHtml += `
                     <div class="load-more-wrap">
