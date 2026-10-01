@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="color-scheme" content="light dark">
+    <title>用户中心</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Roboto', sans-serif;
+        }
+        body {
+            background: #fffbfe;
+            padding: 6px;
+            min-height: 100vh;
+        }
+        .md-card {
+            background: #fff;
+            border-radius: 28px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            padding: 28px 22px;
+            min-height: calc(100vh - 15px);
+        }
+        .text-center { text-align: center; }
+        .mb-12 { margin-bottom: 12px; }
+        .mb-18 { margin-bottom: 18px; }
+        .mb-22 { margin-bottom: 22px; }
+        .text-md { font-size: 14px; }
+        .text-xl { font-size: 20px; }
+        .font-bold { font-weight: 700; }
+        .text-outline {
+            color: #79747e;
+            font-weight: bold;
+        }
+        .gold-text {
+            color: #cba564;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        .badge-scroll {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+            scrollbar-width: none;
+        }
+        .badge-scroll::-webkit-scrollbar { display: none; }
+        /* Removed .custom-badge and .custom-badge-bg styles, as source-badge handles its own rendering */
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 18px;
+        }
+        .grid-item {
+            text-align: center;
+            padding: 16px 8px;
+            background: #f5f3f7;
+            border-radius: 18px;
+        }
+        .grid-item .value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #6750a4;
+            margin-bottom: 6px;
+        }
+        .grid-item .label {
+            font-size: 12px;
+            color: #49454f;
+            line-height: 1;
+        }
+        .grid-item .sub-label {
+            font-size: 11px;
+            color: #9e99a5;
+            margin-top: 4px;
+            line-height: 1;
+        }
+        .verify-grid {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+        .grid-item.full-width {
+            grid-column: 1 / -1;
+        }
+        .email-cell-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .email-cell-left {
+            max-width: calc(100% - 40px);
+        }
+        .email-text {
+            font-size: 14px;
+            font-weight: 700;
+            color: #6750a4;
+            transition: filter 0.25s ease;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            user-select: none;
+        }
+        .email-text.blurred {
+            filter: blur(6px);
+        }
+        .email-text.revealed {
+            white-space: normal;
+            word-break: break-all;
+            overflow: visible;
+            text-overflow: unset;
+        }
+        .eye-btn {
+            background: none;
+            border: none;
+            padding: 6px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            color: #6750a4;
+            position: absolute;
+            transition: opacity 5s;
+            border-radius: 50%;
+            right: 0;
+            cursor: pointer;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .eye-btn:hover {
+            opacity: 1;
+            background: rgba(103,80,164,0.08);
+        }
+        .eye-btn svg { display: block; }
+        .rainbow-text {
+            background: linear-gradient(90deg, #ff3c38, #ff9533, #ffd633, #70fd32, #2bf7df, #2d72ff, #9338ff, #ff38e0, #ff3c38);
+            background-size: 800% 100%;
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            animation: rainbowFlow 60s linear infinite;
+        }
+        @keyframes rainbowFlow {
+           0% { background-position: 0% 50%; }
+           100% { background-position: 700% 50%; }
+        }
+        .avatar-wrap {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 75%;
+            height: 75%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #94a3b8;
+        }
+        .avatar-fallback-char {
+            display: none;
+            font-size: 28px;
+            font-weight: 700;
+            color: #fff;
+            user-select: none;
+            line-height: 1;
+        }
+        .avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        .dl-text {
+            font-size: 14px;
+            font-weight: 700;
+            color: #6750a4;
+            font-variant-numeric: tabular-nums;
+        }
+        .block-list-section {
+            margin-top: 28px;
+            border-top: 1px dashed rgba(103, 80, 164, 0.2);
+            padding-top: 20px;
+        }
+        .block-list-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #6750a4;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .block-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .block-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f5f3f7;
+            padding: 12px 16px;
+            border-radius: 18px;
+            transition: background 0.2s ease;
+        }
+        .block-user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+        .block-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #94a3b8;
+            flex-shrink: 0;
+        }
+        .block-user-details {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .block-username {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1c1b1f;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .block-time {
+            font-size: 11px;
+            color: #9e99a5;
+            margin-top: 2px;
+        }
+        .unblock-btn {
+            background: transparent;
+            border: 1px solid #6750a4;
+            color: #6750a4;
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            margin-left: 12px;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .unblock-btn:hover {
+            background: rgba(103, 80, 164, 0.08);
+        }
+        .unblock-btn:active {
+            background: rgba(103, 80, 164, 0.15);
+        }
+        .unblock-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .empty-block {
+            text-align: center;
+            font-size: 13px;
+            color: #9e99a5;
+            padding: 20px 0;
+        }
+        .load-more-wrap {
+            text-align: center;
+            margin-top: 14px;
+        }
+        .load-more-btn {
+            background: transparent;
+            border: none;
+            color: #6750a4;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 24px;
+            cursor: pointer;
+            border-radius: 9999px;
+            transition: background 0.2s;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;  
+        }
+        .load-more-btn:hover {
+            background: rgba(103, 80, 164, 0.08);
+        }
+        .load-more-btn:disabled {
+            color: #9e99a5;
+            cursor: not-allowed;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            body { background: #1c1b1f; }
+            .md-card {
+                background: #2b2930;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            }
+            h2 { color: #e6e1e5; }
+            .text-outline {
+                color: #cac4d0;
+                font-weight: bold;
+            }
+            .gold-text { color: #e8c896; }
+            .grid-item { background: #3e3842; }
+            .grid-item .value { color: #d0bcff; }
+            .grid-item .label { color: #cac4d0; }
+            .grid-item .sub-label { color: #7a7580; }
+            .email-text { color: #d0bcff; }
+            .eye-btn { color: #d0bcff; }
+            .eye-btn:hover { background: rgba(208,188,255,0.08); }
+            .dl-text { color: #d0bcff; }
+            .block-list-section {
+                border-top-color: rgba(208, 188, 255, 0.2);
+            }
+            .block-list-title {
+                color: #d0bcff;
+            }
+            .block-item {
+                background: #3e3842;
+            }
+            .block-username {
+                color: #e6e1e5;
+            }
+            .block-time {
+                color: #cac4d0;
+            }
+            .unblock-btn {
+                border-color: #d0bcff;
+                color: #d0bcff;
+            }
+            .unblock-btn:hover {
+                background: rgba(208, 188, 255, 0.08);
+            }
+            .unblock-btn:active {
+                background: rgba(208, 188, 255, 0.15);
+            }
+            .load-more-btn {
+                color: #d0bcff;
+            }
+            .load-more-btn:hover {
+                background: rgba(208, 188, 255, 0.08);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="userCenter"></div>
+
+    <script>
+        const BADGE_OPTIONS = {
+            baseFontSize: 14,
+            comment: {
+                maxHeight: 21,
+                maxWidth: 142.5
+            },
+            reply: {
+                maxHeight: 16.5,
+                maxWidth: 112.5
+            }
+        };
+
+        function escapeHTML(value) {
+            return String(value ?? '').replace(/[&<>"']/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function safeImageUrl(value, baseUrl = document.baseURI) {
+            if (!value) return '';
+            try {
+                const base = baseUrl
+                    ? String(baseUrl).replace(/\/+$/, '') + '/'
+                    : document.baseURI;
+                const url = new URL(String(value), base);
+                if (url.protocol === 'https:' || url.protocol === 'http:') {
+                    return url.href;
+                }
+            } catch {}
+            return '';
+        }
+
+        class SourceBadge extends HTMLElement {
+            constructor() {
+                super();
+                this.attachShadow({ mode: 'open' });
+                this._built = false;
+                this._frame = 0;
+                this._observer = null;
+                this._mutationObserver = null;
+                this._fallbackTimer = null;
+                this._scheduleBound = () => this.scheduleFit();
+            }
+
+            connectedCallback() {
+                if (!this._built) {
+                    this._built = true;
+                    this.build();
+                }
+                this.startObservers();
+                this.scheduleFit();
+
+                if (document.fonts) {
+                    document.fonts.ready.then(() => {
+                        if (this.isConnected) {
+                            this.scheduleFit();
+                        }
+                    });
+                    if (document.fonts.addEventListener) {
+                        document.fonts.addEventListener('loadingdone', this._scheduleBound);
+                    }
+                }
+                window.addEventListener('resize', this._scheduleBound, { passive: true });
+            }
+
+            disconnectedCallback() {
+                this._observer?.disconnect();
+                this._mutationObserver?.disconnect();
+                clearInterval(this._fallbackTimer);
+                this._fallbackTimer = null;
+                cancelAnimationFrame(this._frame);
+                this._frame = 0;
+                window.removeEventListener('resize', this._scheduleBound);
+                if (document.fonts?.removeEventListener) {
+                    document.fonts.removeEventListener('loadingdone', this._scheduleBound);
+                }
+            }
+
+            build() {
+                let badge = {};
+                try {
+                    badge = JSON.parse(this.getAttribute('data-badge') || '{}');
+                } catch {}
+
+                const name = String(badge.name || '');
+                this.title = String(badge.description || badge.name || '');
+                this.setAttribute('aria-label', name);
+
+                const layoutStyle = document.createElement('style');
+                layoutStyle.textContent = `
+                    :host {
+                        display: inline-block;
+                        position: relative;
+                        flex: 0 0 auto;
+                        vertical-align: middle;
+                        line-height: 0;
+                    }
+                    .viewport {
+                        position: relative;
+                        display: block;
+                        width: 0;
+                        height: 0;
+                        overflow: visible;
+                    }
+                    .scaler {
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        display: block;
+                        width: max-content;
+                        transform-origin: left top;
+                        line-height: normal;
+                    }
+                    .source {
+                        display: flow-root;
+                        width: max-content;
+                    }
+                `;
+
+                this._viewport = document.createElement('div');
+                this._viewport.className = 'viewport';
+                this._scaler = document.createElement('div');
+                this._scaler.className = 'scaler';
+                this._source = document.createElement('span');
+                this._source.className = 'source';
+                this._sourceRoot = this._source.attachShadow({ mode: 'open' });
+
+                const baseStyle = document.createElement('style');
+                baseStyle.textContent = `
+                    :host {
+                        font-family:
+                            -apple-system,
+                            BlinkMacSystemFont,
+                            "Segoe UI",
+                            Roboto,
+                            sans-serif;
+                        font-size: ${BADGE_OPTIONS.baseFontSize}px;
+                        line-height: 1.4;
+                        color: #fff;
+                    }
+                    .badge {
+                        position: relative;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        box-sizing: border-box;
+                        padding: 3px 10px;
+                        border-radius: 9999px;
+                        background: #94a3b8;
+                        color: #fff;
+                        font-size: inherit;
+                        font-weight: 600;
+                        line-height: 1.4;
+                        white-space: nowrap;
+                        vertical-align: middle;
+                    }
+                    .badge__text {
+                        position: relative;
+                        z-index: 1;
+                    }
+                    .badge-image {
+                        display: block;
+                        width: auto;
+                        height: auto;
+                        max-width: none;
+                        border: 0;
+                    }
+                `;
+
+                const sourceStyle = document.createElement('style');
+                const customCSS = typeof badge.badge_css === 'string' ? badge.badge_css : '';
+                sourceStyle.textContent = customCSS;
+                this._sourceRoot.append(baseStyle, sourceStyle);
+
+                const customHTML = typeof badge.badge_html === 'string' ? badge.badge_html.trim() : '';
+                const imageUrl = safeImageUrl(badge.image_url, badge.base_url);
+
+                if (customHTML && window.DOMPurify) {
+                    const fragment = DOMPurify.sanitize(customHTML, {
+                        RETURN_DOM_FRAGMENT: true,
+                        USE_PROFILES: { html: true, svg: true, svgFilters: true },
+                        FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base']
+                    });
+                    if (fragment.childNodes.length > 0) {
+                        this._sourceRoot.appendChild(fragment);
+                    } else {
+                        this.appendDefaultBadge(name);
+                    }
+                } else if (!customHTML && !customCSS.trim() && imageUrl) {
+                    const image = document.createElement('img');
+                    image.className = 'badge-image';
+                    image.src = imageUrl;
+                    image.alt = name;
+                    image.decoding = 'async';
+                    this._sourceRoot.appendChild(image);
+                } else {
+                    this.appendDefaultBadge(name);
+                }
+
+                this._sourceRoot.querySelectorAll('img').forEach(image => {
+                    image.addEventListener('load', this._scheduleBound);
+                    image.addEventListener('error', this._scheduleBound);
+                });
+
+                this._scaler.appendChild(this._source);
+                this._viewport.appendChild(this._scaler);
+                this.shadowRoot.append(layoutStyle, this._viewport);
+            }
+
+            appendDefaultBadge(name) {
+                const badge = document.createElement('span');
+                badge.className = 'badge';
+                const text = document.createElement('span');
+                text.className = 'badge__text';
+                text.textContent = name;
+                badge.appendChild(text);
+                this._sourceRoot.appendChild(badge);
+            }
+
+            startObservers() {
+                this._observer?.disconnect();
+                this._mutationObserver?.disconnect();
+                if ('ResizeObserver' in window) {
+                    this._observer = new ResizeObserver(this._scheduleBound);
+                    this._observer.observe(this._source);
+                    if (this.parentElement) {
+                        this._observer.observe(this.parentElement);
+                    }
+                } else {
+                    clearInterval(this._fallbackTimer);
+                    this._fallbackTimer = setInterval(this._scheduleBound, 1000);
+                }
+                this._mutationObserver = new MutationObserver(this._scheduleBound);
+                let parent = this.parentElement;
+                while (parent && parent !== document.body) {
+                    this._mutationObserver.observe(parent, {
+                        attributes: true,
+                        attributeFilter: ['class', 'style', 'hidden']
+                    });
+                    parent = parent.parentElement;
+                }
+            }
+
+            scheduleFit() {
+                if (!this.isConnected || this._frame) {
+                    return;
+                }
+                this._frame = requestAnimationFrame(() => {
+                    this._frame = 0;
+                    this.fit();
+                });
+            }
+
+            fit() {
+                if (!this._source) return;
+                const width = Math.max(this._source.offsetWidth, this._source.scrollWidth);
+                const height = Math.max(this._source.offsetHeight, this._source.scrollHeight);
+
+                if (!width || !height) {
+                    return;
+                }
+                const options = BADGE_OPTIONS.comment; // Using 'comment' options as default for user badges
+
+                let availableWidth = options.maxWidth;
+                const parent = this.parentElement;
+
+                if (parent && parent.clientWidth > 0) {
+                    const style = getComputedStyle(parent);
+                    availableWidth = parent.clientWidth
+                        - (parseFloat(style.paddingLeft) || 0)
+                        - (parseFloat(style.paddingRight) || 0);
+                }
+
+                const maxWidth = Math.max(1, Math.min(options.maxWidth, availableWidth));
+                const scale = Math.min(1, options.maxHeight / height, maxWidth / width);
+                this._scaler.style.transform = `scale(${scale})`;
+
+                const displayWidth = `${width * scale}px`;
+                const displayHeight = `${height * scale}px`;
+
+                if (this._viewport.style.width !== displayWidth) {
+                    this._viewport.style.width = displayWidth;
+                }
+                if (this._viewport.style.height !== displayHeight) {
+                    this._viewport.style.height = displayHeight;
+                }
+            }
+        }
+
+        if (!customElements.get('source-badge')) {
+            customElements.define('source-badge', SourceBadge);
+        }
+
+        function renderUserBadge(badge) {
+            const data = {
+                name: badge.name || '',
+                description: badge.description || '',
+                image_url: badge.image_url || '',
+                badge_html: badge.badge_html || '',
+                badge_css: badge.badge_css || '',
+                base_url: '' // Assuming badge_image_url is absolute or relative to document.baseURI
+            };
+
+            return `
+                <source-badge
+                    data-badge="${escapeHTML(JSON.stringify(data))}"
+                ></source-badge>
+            `;
+        }
+
+        const API_TOKEN = userData.TOKEN;
+        let blockedUsers = [];
+        let blockCurrentPage = 1;
+        let blockTotalPages = 1;
+        let isBlockLoading = false;
+
+        const eyeOpen = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+        const eyeClosed = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+        function toggleEmail() {
+            const emailEl = document.getElementById('emailText');
+            const eyeBtn  = document.getElementById('eyeBtn');
+            const isBlurred = emailEl.classList.contains('blurred');
+            if (isBlurred) {
+                emailEl.classList.remove('blurred');
+                emailEl.classList.add('revealed');
+                eyeBtn.innerHTML = eyeOpen;
+                eyeBtn.title = '点击隐藏';
+            } else {
+                emailEl.classList.add('blurred');
+                emailEl.classList.remove('revealed');
+                eyeBtn.innerHTML = eyeClosed;
+                eyeBtn.title = '点击显示';
+            }
+        }
+
+        function timeAgo(dateStr) {
+            const past = new Date(dateStr.replace(' ', 'T'));
+            const now = new Date();
+            const diffMs = now - past;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) return '今天';
+            if (diffDays === 1) return '昨天';
+            if (diffDays < 30) return `${diffDays} 天前`;
+
+            const diffMonths = Math.floor(diffDays / 30);
+            if (diffMonths < 12) return `${diffMonths} 个月前`;
+
+            const diffYears = Math.floor(diffDays / 365);
+            const remainMonths = Math.floor((diffDays % 365) / 30);
+            if (remainMonths > 0) return `${diffYears} 年 ${remainMonths} 个月前`;
+            return `${diffYears} 年前`;
+        }
+
+        let countdownTimer = null;
+        function formatCountdown(diff) {
+            const d = Math.floor(diff / 86400000);
+            const h = Math.floor((diff % 86400000) / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+
+            const res = [];
+            if (d > 0) {
+                res.push(`${d}天`);
+            }
+            if (h > 0 || res.length > 0) {
+                const hStr = res.length > 0 ? String(h).padStart(2, '0') : h;
+                res.push(`${hStr}小时`);
+            }
+            if (m > 0 || res.length > 0) {
+                const mStr = res.length > 0 ? String(m).padStart(2, '0') : m;
+                res.push(`${mStr}分`);
+            }
+            const sStr = res.length > 0 ? String(s).padStart(2, '0') : s;
+            res.push(`${sStr}秒`);
+
+            return res.join(' ');
+        }
+
+        function startCountdown(unlockDate) {
+            function tick() {
+                const el = document.getElementById('dlCountdown');
+                if (!el) { clearInterval(countdownTimer); return; }
+                const diff = unlockDate - new Date();
+                if (diff <= 0) {
+                    el.textContent = '已获取';
+                    clearInterval(countdownTimer);
+                    return;
+                }
+                el.textContent = formatCountdown(diff) + ' 后解锁';
+            }
+            tick();
+            countdownTimer = setInterval(tick, 1000);
+        }
+        
+        async function loadBlockedUsers(page = 1) {
+            if (isBlockLoading) return;
+            isBlockLoading = true;
+            
+            const loadBtn = document.getElementById('loadMoreBlockBtn');
+            if (loadBtn) {
+                loadBtn.disabled = true;
+                loadBtn.textContent = '加载中...';
+            }
+
+            try {
+                const response = await fetch(`${API}/api/v2/users/me/blocks?page=${page}&limit=20`, {
+                    headers: {
+                        'Authorization': API_TOKEN,
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const resData = await response.json();
+                    if (resData.success && resData.data) {
+                        const newUsers = resData.data.blocked_users || [];
+                        const pagination = resData.data.pagination || { page: 1, pages: 1 };
+                        
+                        if (page === 1) {
+                            blockedUsers = newUsers;
+                        } else {
+                            blockedUsers.push(...newUsers);
+                        }
+                        
+                        blockCurrentPage = pagination.page;
+                        blockTotalPages = pagination.pages;
+                    }
+                }
+            } catch (e) {
+                console.warn('获取在线屏蔽列表失败。', e);
+            } finally {
+                isBlockLoading = false;
+                renderBlockedList();
+            }
+        }
+        
+        function loadNextBlockPage() {
+            if (blockCurrentPage < blockTotalPages) {
+                loadBlockedUsers(blockCurrentPage + 1);
+            }
+        }
+        
+        async function unblockUser(userId, btnEl) {
+            if (confirm('确定要解除对该用户的屏蔽吗？')) {
+                if (btnEl) {
+                    btnEl.disabled = true;
+                    btnEl.textContent = '处理中...';
+                }
+                try {
+                    const response = await fetch(`${API}/api/v2/users/${userId}/block`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': API_TOKEN,
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (response.status === 204 || response.ok) {
+                        blockedUsers = blockedUsers.filter(user => user.id !== userId);
+                        renderBlockedList();
+                        alert('解除屏蔽成功！');
+                    } else {
+                        alert('解除屏蔽失败，请稍后重试。');
+                        if (btnEl) {
+                            btnEl.disabled = false;
+                            btnEl.textContent = '解除屏蔽';
+                        }
+                    }
+                } catch (e) {
+                    console.error('解除屏蔽请求失败:', e);
+                    alert('网络错误，解除屏蔽失败。');
+                    if (btnEl) {
+                        btnEl.disabled = false;
+                        btnEl.textContent = '解除屏蔽';
+                    }
+                }
+            }
+        }
+
+        function renderBlockedList() {
+            const container = document.getElementById('blockedListContainer');
+            if (!container) return;
+
+            if (blockedUsers.length === 0) {
+                container.innerHTML = `<div class="empty-block">暂无屏蔽用户</div>`;
+                return;
+            }
+
+            let listHtml = blockedUsers.map(user => {
+                const avatarUrl = user.avatar || 'https://novalpie.cc/uploads/default_avatar.jpg';
+                return `
+                    <div class="block-item">
+                        <div class="block-user-info">
+                            <img class="block-avatar" src="${avatarUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 40 40%22><rect width=%22100%%22 height=%22100%%22 fill=%22%2394a3b8%22/><text x=%2250%%22 y=%2255%%22 font-size=%2218%22 fill=%22%23fff%22 font-family=%22sans-serif%22 font-weight=%22bold%22 text-anchor=%22middle%22 dominant-baseline=%22middle%22>${(user.username || '?').charAt(0).toUpperCase()}</text></svg>';">
+                            <div class="block-user-details">
+                                <span class="block-username">${user.username}</span>
+                                <span class="block-time">屏蔽于: ${user.blocked_at.split(' ')[0]}</span>
+                            </div>
+                        </div>
+                        <button class="unblock-btn" onclick="unblockUser(${user.id}, this)">解除屏蔽</button>
+                    </div>
+                `;
+            }).join('');
+            
+            if (blockCurrentPage < blockTotalPages) {
+                listHtml += `
+                    <div class="load-more-wrap">
+                        <button id="loadMoreBlockBtn" class="load-more-btn" onclick="loadNextBlockPage()">加载更多</button>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = listHtml;
+        }
+
+        function render() {
+            const $container = document.getElementById('userCenter');
+            const role = userData.role === 'user' ? '普通用户' : userData.role === 'admin' ? '管理员' : userData.role;
+
+            const badges = userData.badges.map(b => renderUserBadge(b)).join('');
+
+            const coreData = `
+                <div class="grid-item"><div class="value">${userData.point}</div><div class="label">积分资产</div></div>
+                <div class="grid-item"><div class="value">${userData.login_count} / ${userData.checkday}</div><div class="label">登录次数 / 签到天数</div></div>
+                <div class="grid-item">
+                    <div class="value">${userData.created_at.split(' ')[0]}</div>
+                    <div class="sub-label">(${timeAgo(userData.created_at)})</div>
+                    <div class="label">注册时间</div>
+                </div>
+                <div class="grid-item">
+                    <div class="value">${userData.last_login_at.split(' ')[0]}</div>
+                    <div class="sub-label">(${timeAgo(userData.last_login_at)})</div>
+                    <div class="label">最近登录</div>
+                </div>
+            `;
+
+            const emailCellInner = userData.email_verified ? `
+                <div class="email-cell-wrap">
+                    <div class="email-cell-left">
+                        <span class="email-text blurred" id="emailText">${userData.real_email}</span>
+                    </div>
+                    <button class="eye-btn" id="eyeBtn" title="点击显示" onclick="toggleEmail()">${eyeClosed}</button>
+                </div>
+            ` : '<span style="color:red;">未验证</span>';
+
+            const creatDate = new Date(userData.created_at.replace(' ', 'T'));
+            const UNLOCK_DATE = new Date(creatDate.getTime() + 60 * 24 * 60 * 60 * 1000);
+            const unlocked = new Date() >= UNLOCK_DATE;
+
+            const downloadCellInner = unlocked
+                ? '<span class="dl-text">已获取</span>'
+                : '<span class="dl-text" id="dlCountdown">计算中…</span>';
+
+            const verifyData = `
+                <div class="grid-item full-width">
+                    ${emailCellInner}
+                    <div class="label" style="margin-top:6px;">邮箱状态</div>
+                </div>
+                <div class="grid-item"><div class="value">${userData.status === 'active' ? '正常' : userData.status === 'banned' ? '<span style="color:red;">已被封禁</span>' : '<span style="color:red;">未知状态</span>'}</div><div class="label">账号状态</div></div>
+                <div class="grid-item"><div class="value">${userData.political_verified ? '已通过' : '<span style="color:red;">未通过</span>'}</div><div class="label">考核</div></div>
+                <div class="grid-item"><div class="value">${userData.is_adult_verified ? '已认证' : '<span style="color:red;">未认证</span>'}</div><div class="label">成人认证</div></div>
+                <div class="grid-item full-width">
+                    ${downloadCellInner}
+                    <div class="label" style="margin-top:6px;">下载权限</div>
+                </div>
+            `;
+
+            const avatarFrameHtml = userData.avatar_frame ? `<img src="${userData.avatar_frame}" style="position:absolute;top:50%;left:50%;width:125%;height:125%;transform:translate(-50%,-50%);object-fit:contain;z-index:99;pointer-events:none;">` : '';
+
+            $container.innerHTML = `
+                <div class="md-card">
+                    <div class="text-center mb-18" style="position:relative;width:115px;height:115px;margin:0 auto;">
+                        <div class="avatar-wrap" id="avatarWrap">
+                            <span class="avatar-fallback-char" id="avatarFallback"></span>
+                            <img class="avatar-img" id="avatarImg" src="${userData.avatar}"
+                                onerror="this.style.display='none';document.getElementById('avatarFallback').style.display='block';">
+                        </div>
+                        ${avatarFrameHtml}
+                    </div>
+                    <div class="text-center mb-22">
+                        <h2 class="text-xl font-bold mb-12">${userData.username}</h2>
+                        <p class="text-md text-outline">UID:<span class="rainbow-text">${userData.id}</span>&nbsp;&nbsp;&nbsp;身份组:<span class="gold-text">${role}</span></p>
+                    </div>
+                    <div class="badge-scroll mb-22">${badges}</div>
+                    <div class="data-grid">${coreData}</div>
+                    <div class="data-grid verify-grid">${verifyData}</div>
+                    <div class="block-list-section">
+                        <div class="block-list-title">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                            屏蔽列表
+                        </div>
+                        <div id="blockedListContainer" class="block-list">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const fallbackEl = document.getElementById('avatarFallback');
+            if (fallbackEl) {
+                fallbackEl.textContent = (userData.username || '?').charAt(0).toUpperCase();
+                if (!userData.avatar) {
+                    document.getElementById('avatarImg').style.display = 'none';
+                    fallbackEl.style.display = 'block';
+                }
+            }
+
+            if (!unlocked) {
+                if (countdownTimer) clearInterval(countdownTimer);
+                startCountdown(UNLOCK_DATE);
+            }
+
+            $container.querySelectorAll('source-badge').forEach(badge => badge.scheduleFit?.());
+
+            renderBlockedList();
+        }
+
+        window.onload = function() {
+            render();
+            loadBlockedUsers(1);
+        };
+    </script>
+</body>
+</html>
