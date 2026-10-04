@@ -9,7 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/14.1.2/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.7/viewer.min.css">
-    <link rel="stylesheet" href="https://fastly.jsdelivr.net/gh/Dark-Tide/booksource-File@ecedd17831cc69219110eadc3709ee421adc495a/styles.css">
+    <link rel="stylesheet" href="https://fastly.jsdelivr.net/gh/Dark-Tide/booksource-File@c033acb34ceb9b6924419ef9a455f318c484b870/styles.css">
 </head>
 <body>
     <div id="toastContainer" class="toast-container"></div>
@@ -22,19 +22,9 @@
                 <img id="coverImage" class="cover-image" alt="封面">
             </div>
         </div>
-        <div class="sort-bar-wrapper">
-            <button class="sort-bar-btn" id="sortBarBtn">
-                <span class="sort-bar-label" id="sortBarLabel">默认排序</span>
-                <span class="sort-bar-arrow" id="sortBarArrow">▾</span>
-            </button>
-            <div class="sort-dropdown" id="sortDropdown">
-                <button class="sort-option active" data-sort="default">默认排序</button>
-                <button class="sort-option" data-sort="reverse">倒序</button>
-                <button class="sort-option" data-sort="hot">热度优先</button>
-            </div>
-        </div>
         <div class="comments-list" id="commentsList">
             <div class="loading">加载中,请等待片刻...</div>
+            <div id="commentsListEndSentinel" style="height:1px; pointer-events:none;"></div>
         </div>
         <div class="bottom-line">
             <span>--------我也是有底线的---------</span>
@@ -96,7 +86,7 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/viewerjs/1.11.7/viewer.min.js"></script>
-    <script src="https://fastly.jsdelivr.net/gh/Dark-Tide/booksource-File@ecedd17831cc69219110eadc3709ee421adc495a/script.js"></script>
+    <script src="https://fastly.jsdelivr.net/gh/Dark-Tide/booksource-File@c033acb34ceb9b6924419ef9a455f318c484b870/script.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const config = ◎Data;
