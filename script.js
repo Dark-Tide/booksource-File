@@ -1412,7 +1412,6 @@ async function renderDisplayedComments(appendMode = false, startIdx = 0) {
         container.appendChild(sentinel);
     }
 
-
     bindInteractiveElements(container);
     bindActionButtons(container);
 }
@@ -2028,6 +2027,9 @@ function bindActionButtons(
     if (!container) return;
 
     container.querySelectorAll('.reply-btn').forEach(button => {
+        if (button.dataset.bound) return;
+        button.dataset.bound = '1';
+
         button.addEventListener('click', () => {
             openInputPanel(
                 'reply',
@@ -2039,6 +2041,9 @@ function bindActionButtons(
 
     container.querySelectorAll('.delete-comment-btn')
         .forEach(button => {
+            if (button.dataset.bound) return;
+            button.dataset.bound = '1';
+
             button.addEventListener('click', () => {
                 deleteComment(button.dataset.commentId);
             });
@@ -2046,6 +2051,9 @@ function bindActionButtons(
 
     container.querySelectorAll('.delete-reply-btn')
         .forEach(button => {
+            if (button.dataset.bound) return;
+            button.dataset.bound = '1';
+
             button.addEventListener('click', () => {
                 deleteReply(button.dataset.replyId);
             });
@@ -2053,10 +2061,13 @@ function bindActionButtons(
 
     container.querySelectorAll('.block-btn')
         .forEach(button => {
+            if (button.dataset.bound) return;
+            button.dataset.bound = '1';
+
             button.addEventListener('click', event => {
                 event.stopPropagation();
-
                 event.preventDefault();
+
                 blockUser(
                     button.dataset.userId,
                     button
@@ -2066,6 +2077,9 @@ function bindActionButtons(
 
     container.querySelectorAll('.stat-item')
         .forEach(button => {
+            if (button.dataset.bound) return;
+            button.dataset.bound = '1';
+
             button.addEventListener('click', event => {
                 event.stopPropagation();
 
