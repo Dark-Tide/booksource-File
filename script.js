@@ -18,8 +18,7 @@ const replyAnimations = new WeakMap();
 
 let globalConfig = {};
 let currentUserId = null;
-let cachedComments = [];
-let currentSort = 'default';
+let displayedComments = [];
 
 let currentInputMode = null;
 let currentCommentId = null;
@@ -29,6 +28,10 @@ let renderVersion = 0;
 let reviewVersion = 0;
 let previewVersion = 0;
 let uiInitialized = false;
+
+let currentPage = 0;
+let totalPages = 0;
+let isLoadingMore = false;
 
 const BADGE_OPTIONS = {
     baseFontSize: 14,
@@ -87,6 +90,15 @@ const ICONS = {
         `
     }
 };
+
+const ui = {};
+
+function getUIElement(id) {
+    if (!ui[id]) {
+        ui[id] = document.getElementById(id);
+    }
+    return ui[id];
+}
 
 function escapeHTML(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -203,7 +215,7 @@ async function requestJSON(url, options = {}) {
 }
 
 function showToast(message, type = 'info', duration = 3000) {
-    const container = document.getElementById('toastContainer');
+    const container = getUIElement('toastContainer');
     if (!container) {
         alert(message);
         return;
@@ -246,7 +258,11 @@ function showToast(message, type = 'info', duration = 3000) {
     toast.addEventListener('click', close);
 }
 
-function refreshReview() {
+async function refreshReview() {
+    currentPage = 0;
+    displayedComments = [];
+    getUIElement('commentsList').innerHTML = '<div class="loading">加载中,请等待片刻...</div>';
+
     return getReview(
         globalConfig.baseUrl,
         globalConfig.bookName,
@@ -255,7 +271,8 @@ function refreshReview() {
         globalConfig.chapterId,
         globalConfig.detailUrl,
         globalConfig.coverUrl,
-        globalConfig.userToken
+        globalConfig.userToken,
+        true
     );
 }
 
@@ -725,7 +742,7 @@ function hydrateBookCards(container) {
     container.querySelectorAll(
         '.book-card-placeholder[data-book-id]'
     ).forEach(element => {
-        if (element.dataset.bookLoaded) return;
+        if (element.dataset.bookLoaded === '1') return;
         element.dataset.bookLoaded = '1';
 
         loadBookCard(
@@ -959,47 +976,62 @@ function processSpoiler(text) {
 
 async function processFoldTags(text, baseUrl, userToken) {
     const regex = /\[fold:([^\]]+)\]([\s\S]*?)\[\/fold\]/g;
-
     let lastIndex = 0;
-    const resultParts = [];
-    let match;
+    const contentPromises = [];
+    const structureParts = [];
 
+    let match;
     while ((match = regex.exec(text))) {
-        resultParts.push(
-            '\n\n' + text.slice(lastIndex, match.index)
-        );
+        if (match.index > lastIndex) {
+            structureParts.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+        }
 
         const title = match[1];
         const content = match[2];
         const foldId = makeId('fold');
 
-        const renderedContent = await renderMarkdown(
-            content.trim(),
-            baseUrl,
-            userToken
-        );
-
-        resultParts.push(
-        '\n\n' +
-        '<div class="fold-container">\n' +
-        '<div class="fold-header"' +
-        ` data-fold="${foldId}"` +
-        ' role="button"' +
-        ' tabindex="0"' +
-        ' aria-expanded="false">' +
-        escapeHTML(title) +
-        '</div>\n' +
-        `<div class="fold-content" id="${foldId}">\n` +
-        renderedContent.trim() +
-        '\n</div>\n' +
-        '</div>\n\n'
-    );
+        structureParts.push({ type: 'fold', id: foldId, title: title });
+        contentPromises.push(renderMarkdown(content.trim(), baseUrl, userToken));
 
         lastIndex = regex.lastIndex;
     }
 
-    resultParts.push('\n\n' + text.slice(lastIndex));
-    return resultParts.join('');
+    if (lastIndex < text.length) {
+        structureParts.push({ type: 'text', value: text.slice(lastIndex) });
+    }
+
+    if (contentPromises.length === 0) {
+        return text;
+    }
+
+    const renderedContents = await Promise.all(contentPromises);
+    let foldContentIndex = 0;
+    const resultHtmlParts = [];
+
+    structureParts.forEach(part => {
+        if (part.type === 'text') {
+            resultHtmlParts.push(part.value);
+        } else if (part.type === 'fold') {
+            const renderedContent = renderedContents[foldContentIndex++];
+            resultHtmlParts.push(
+                '\n\n' +
+                '<div class="fold-container">\n' +
+                '<div class="fold-header"' +
+                ` data-fold="${part.id}"` +
+                ' role="button"' +
+                ' tabindex="0"' +
+                ' aria-expanded="false">' +
+                escapeHTML(part.title) +
+                '</div>\n' +
+                `<div class="fold-content" id="${part.id}">\n` +
+                renderedContent.trim() +
+                '\n</div>\n' +
+                '</div>\n\n'
+            );
+        }
+    });
+
+    return resultHtmlParts.join('');
 }
 
 async function renderMarkdown(text, baseUrl, userToken) {
@@ -1038,332 +1070,174 @@ async function renderMarkdown(text, baseUrl, userToken) {
     });
 }
 
-async function getComment(comments, baseUrl, userToken) {
-    if (!Array.isArray(comments) || comments.length === 0) {
-        return `
-            <div class="no-comments">
-                <div class="no-comments-icon">💬</div>
-                <div class="no-comments-text">暂无评论</div>
+async function renderComment(
+    comment,
+    isReply = false,
+    depth = 0,
+    rootId = null,
+    baseUrl,
+    userToken
+) {
+    const currentRootId = depth === 0 ? comment.id : rootId;
+    const authorName = String(comment.authorName || '匿名用户');
+    const initial = Array.from(authorName)[0] || '?';
+    const isOwnComment = currentUserId !== null && String(comment.authorId) === String(currentUserId);
+    const avatarUrl = safeImageUrl(comment.authorAvatar, baseUrl);
+    const frameUrl = safeImageUrl(comment.authorAvatarFrame, baseUrl);
+
+    const avatarClass = isReply ? 'reply-avatar' : 'user-avatar';
+    const avatarContainerClass = isReply ? 'reply-avatar-container' : 'user-avatar-container';
+    const infoClass = isReply ? 'reply-info' : 'user-info';
+    const authorClass = isReply ? 'reply-author' : 'comment-author';
+    const timeClass = isReply ? 'reply-time' : 'comment-time';
+    const headerClass = isReply ? 'reply-header' : 'comment-header';
+
+    const avatarContent = avatarUrl
+        ? `<img src="${escapeHTML(avatarUrl)}" alt="${escapeHTML(authorName)}">`
+        : escapeHTML(initial);
+
+    const frameHTML = frameUrl
+        ? `<img src="${escapeHTML(frameUrl)}" class="${isReply ? 'reply-avatar-frame' : 'avatar-frame'}" alt="">`
+        : '';
+
+    const blockHTML = !isOwnComment && currentUserId !== null && comment.authorId != null
+        ? `<button class="block-btn" data-user-id="${escapeHTML(comment.authorId)}" data-user-name="${escapeHTML(authorName)}" type="button" aria-label="屏蔽 ${escapeHTML(authorName)}" title="屏蔽该用户">${BLOCK_ICON}</button>`
+        : '';
+
+    let badgesHTML = '';
+    if (Array.isArray(comment.authorBadges) && comment.authorBadges.length > 0) {
+        const badgeItems = comment.authorBadges
+            .filter(badge => badge && typeof badge === 'object')
+            .map(badge => renderSourceBadge(badge, isReply))
+            .join('');
+        badgesHTML = `
+            <div class="${isReply ? 'reply-badges-section' : 'badges-section'}">
+                <div class="${isReply ? 'reply-badges-container' : 'badges-container'}">
+                    ${badgeItems}
+                </div>
             </div>
         `;
     }
 
-    async function renderComment(
-        comment,
-        isReply = false,
-        depth = 0,
-        rootId = null
-    ) {
-        const currentRootId = depth === 0
-            ? comment.id
-            : rootId;
+    const reactions = Array.isArray(comment.userReactions) ? comment.userReactions : [];
+    const helpfulActive = reactions.includes('helpful');
+    const notHelpfulActive = reactions.includes('not_helpful');
 
-        const authorName = String(
-            comment.authorName || '匿名用户'
-        );
+    const statsHTML = `
+        <div class="${isReply ? 'reply-stats' : 'comment-stats'}">
+            <span class="stat-item helpful ${helpfulActive ? 'active' : ''}" data-id="${escapeHTML(comment.id)}" data-type="helpful" role="button" tabindex="0">
+                ${helpfulActive ? ICONS.helpful.filled : ICONS.helpful.outline}
+                <span class="count">${Number(comment.helpfulCount) || 0}</span>
+            </span>
+            <span class="stat-item not-helpful ${notHelpfulActive ? 'active' : ''}" data-id="${escapeHTML(comment.id)}" data-type="not_helpful" role="button" tabindex="0">
+                ${notHelpfulActive ? ICONS.not_helpful.filled : ICONS.not_helpful.outline}
+                <span class="count">${Number(comment.notHelpfulCount) || 0}</span>
+            </span>
+        </div>
+    `;
 
-        const initial = Array.from(authorName)[0] || '?';
+    const contentHTML = await renderMarkdown(comment.content, baseUrl, userToken);
 
-        const isOwnComment =
-            currentUserId !== null &&
-            String(comment.authorId) === String(currentUserId);
+    const replyToHTML = isReply && comment.replyToName
+        ? `<div class="reply-to-tag">@ ${escapeHTML(comment.replyToName)}</div>`
+        : '';
 
-        const avatarUrl = safeImageUrl(
-            comment.authorAvatar,
-            baseUrl
-        );
+    const deleteHTML = isOwnComment
+        ? `
+            <button class="action-btn delete ${isReply ? 'delete-reply-btn' : 'delete-comment-btn'}"
+                    ${isReply ? `data-reply-id="${escapeHTML(comment.id)}"` : `data-comment-id="${escapeHTML(comment.id)}"`}
+                    type="button">🗑️ 删除</button>
+        `
+        : '';
 
-        const frameUrl = safeImageUrl(
-            comment.authorAvatarFrame,
-            baseUrl
-        );
-
-        const avatarClass = isReply
-            ? 'reply-avatar'
-            : 'user-avatar';
-
-        const avatarContainerClass = isReply
-            ? 'reply-avatar-container'
-            : 'user-avatar-container';
-
-        const infoClass = isReply
-            ? 'reply-info'
-            : 'user-info';
-
-        const authorClass = isReply
-            ? 'reply-author'
-            : 'comment-author';
-
-        const timeClass = isReply
-            ? 'reply-time'
-            : 'comment-time';
-
-        const headerClass = isReply
-            ? 'reply-header'
-            : 'comment-header';
-
-        const avatarContent = avatarUrl
-            ? `
-                <img
-                    src="${escapeHTML(avatarUrl)}"
-                    alt="${escapeHTML(authorName)}"
-                >
-            `
-            : escapeHTML(initial);
-
-        const frameHTML = frameUrl
-            ? `
-                <img
-                    src="${escapeHTML(frameUrl)}"
-                    class="${
-                        isReply ? 'reply-avatar-frame' : 'avatar-frame'
-                    }"
-                    alt=""
-                >
-            `
-            : '';
-
-        const blockHTML = !isOwnComment && currentUserId !== null && comment.authorId != null
-            ? `
-                <button
-                    class="block-btn"
-                    data-user-id="${escapeHTML(comment.authorId)}"
-                    data-user-name="${escapeHTML(authorName)}"
-                    type="button"
-                    aria-label="屏蔽 ${escapeHTML(authorName)}"
-                    title="屏蔽该用户"
-                >${BLOCK_ICON}</button>
-            `
-            : '';
-
-        let badgesHTML = '';
-
-        if (
-            Array.isArray(comment.authorBadges) &&
-            comment.authorBadges.length > 0
-        ) {
-            const badgeItems = comment.authorBadges
-                .filter(badge => badge && typeof badge === 'object')
-                .map(badge => renderSourceBadge(badge, isReply))
-                .join('');
-
-            badgesHTML = `
-                <div class="${
-                    isReply
-                        ? 'reply-badges-section'
-                        : 'badges-section'
-                }">
-                    <div class="${
-                        isReply
-                            ? 'reply-badges-container'
-                            : 'badges-container'
-                    }">
-                        ${badgeItems}
-                    </div>
-                </div>
-            `;
-        }
-
-        const reactions = Array.isArray(comment.userReactions)
-            ? comment.userReactions
-            : [];
-
-        const helpfulActive = reactions.includes('helpful');
-        const notHelpfulActive = reactions.includes('not_helpful');
-
-        const statsHTML = `
-            <div class="${isReply ? 'reply-stats' : 'comment-stats'}">
-                <span
-                    class="stat-item helpful ${
-                        helpfulActive ? 'active' : ''
-                    }"
-                    data-id="${escapeHTML(comment.id)}"
-                    data-type="helpful"
-                    role="button"
-                    tabindex="0"
-                >
-                    ${
-                        helpfulActive
-                            ? ICONS.helpful.filled
-                            : ICONS.helpful.outline
-                    }
-                    <span class="count">${
-                        Number(comment.helpfulCount) || 0
-                    }</span>
-                </span>
-
-                <span
-                    class="stat-item not-helpful ${
-                        notHelpfulActive ? 'active' : ''
-                    }"
-                    data-id="${escapeHTML(comment.id)}"
-                    data-type="not_helpful"
-                    role="button"
-                    tabindex="0"
-                >
-                    ${
-                        notHelpfulActive
-                            ? ICONS.not_helpful.filled
-                            : ICONS.not_helpful.outline
-                    }
-                    <span class="count">${
-                        Number(comment.notHelpfulCount) || 0
-                    }</span>
-                </span>
+    const actionsHTML = `
+        <div class="${isReply ? 'reply-actions' : 'comment-actions'}">
+            <div class="action-btns-group">
+                <button class="action-btn reply-btn" data-comment-id="${escapeHTML(currentRootId)}" data-author-name="${escapeHTML(authorName)}" type="button">💬 回复</button>
+                ${deleteHTML}
             </div>
-        `;
+            ${statsHTML}
+        </div>
+    `;
 
-        const contentHTML = await renderMarkdown(
-            comment.content,
-            baseUrl,
-            userToken
+    let repliesHTML = '';
+    const replies = Array.isArray(comment.replies) ? comment.replies : [];
+
+    if (replies.length > 0) {
+        const replyItems = await Promise.all(
+            replies.map(reply => renderComment(reply, true, depth + 1, currentRootId, baseUrl, userToken))
         );
 
-        const replyToHTML = isReply && comment.replyToName
-            ? `
-                <div class="reply-to-tag">
-                    @ ${escapeHTML(comment.replyToName)}
-                </div>
-            `
-            : '';
-
-        const deleteHTML = isOwnComment
-            ? `
-                <button
-                    class="action-btn delete ${
-                        isReply
-                            ? 'delete-reply-btn'
-                            : 'delete-comment-btn'
-                    }"
-                    ${
-                        isReply
-                            ? `data-reply-id="${escapeHTML(comment.id)}"`
-                            : `data-comment-id="${escapeHTML(comment.id)}"`
-                    }
-                    type="button"
-                >🗑️ 删除</button>
-            `
-            : '';
-
-        const actionsHTML = `
-            <div class="${isReply ? 'reply-actions' : 'comment-actions'}">
-                <div class="action-btns-group">
-                    <button
-                        class="action-btn reply-btn"
-                        data-comment-id="${escapeHTML(currentRootId)}"
-                        data-author-name="${escapeHTML(authorName)}"
-                        type="button"
-                    >💬 回复</button>
-
-                    ${deleteHTML}
-                </div>
-
-                ${statsHTML}
-            </div>
-        `;
-
-        let repliesHTML = '';
-
-        const replies = Array.isArray(comment.replies)
-            ? comment.replies
-            : [];
-
-        if (replies.length > 0) {
-            const replyItems = await Promise.all(
-                replies.map(reply => renderComment(
-                    reply,
-                    true,
-                    depth + 1,
-                    currentRootId
-                ))
-            );
-
-            if (depth === 0) {
-                const repliesId = makeId('replies');
-
-                repliesHTML = `
-                    <div class="replies-toggle">
-                        <button
-                            class="replies-toggle-btn"
-                            type="button"
-                            data-replies="${repliesId}"
-                            aria-controls="${repliesId}"
-                            aria-expanded="false"
-                        >
-                            <span class="replies-toggle-pill">
-                                <span class="replies-toggle-label">展开回复</span>
-                                <span class="reply-count">${replies.length}</span>
-                                <svg class="replies-toggle-arrow"
-                                     viewBox="0 0 24 24" fill="none"
-                                     stroke="currentColor" stroke-width="1.8"
-                                     stroke-linecap="round" stroke-linejoin="round"
-                                     aria-hidden="true" focusable="false">
-                                    <path d="m6 9 6 6 6-6"></path>
-                                </svg>
-                            </span>
-                        </button>
-                    </div>
-
-                    <div
-                        class="replies-container"
-                        id="${repliesId}"
-                    >${replyItems.join('')}</div>
-                `;
-            } else {
-                repliesHTML = `
-                    <div class="replies-container expanded">
-                        ${replyItems.join('')}
-                    </div>
-                `;
-            }
-        }
-
-        return `
-            <div class="${isReply ? 'reply-item' : 'comment-item'}">
-                ${replyToHTML}
-
-                <div class="${headerClass}">
-                    <div class="${avatarContainerClass}">
-                        <div class="${
-                            avatarClass
-                        }${avatarUrl ? ' has-image' : ''}">
-                            ${avatarContent}
-                        </div>
-
-                        ${frameHTML}
-                    </div>
-
-                    <div class="${infoClass}">
-                        <div class="author-line">
-                            <span class="${authorClass}">
-                                ${escapeHTML(authorName)}
-                            </span>
-                            ${blockHTML}
-                        </div>
-
-                        <span class="${timeClass}">
-                            ${escapeHTML(comment.createdAt || '')}
+        if (depth === 0) {
+            const repliesId = makeId('replies');
+            repliesHTML = `
+                <div class="replies-toggle">
+                    <button class="replies-toggle-btn" type="button" data-replies="${repliesId}" aria-controls="${repliesId}" aria-expanded="false">
+                        <span class="replies-toggle-pill">
+                            <span class="replies-toggle-label">展开回复</span>
+                            <span class="reply-count">${replies.length}</span>
+                            <svg class="replies-toggle-arrow"
+                                 viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="1.8"
+                                 stroke-linecap="round" stroke-linejoin="round"
+                                 aria-hidden="true" focusable="false">
+                                <path d="m6 9 6 6 6-6"></path>
+                            </svg>
                         </span>
-                    </div>
+                    </button>
                 </div>
-
-                ${badgesHTML}
-
-                <div class="${
-                    isReply ? 'reply-content' : 'comment-content'
-                }">${contentHTML}</div>
-
-                ${actionsHTML}
-                ${repliesHTML}
-            </div>
-        `;
+                <div class="replies-container" id="${repliesId}">${replyItems.join('')}</div>
+            `;
+        } else {
+            repliesHTML = `<div class="replies-container expanded">${replyItems.join('')}</div>`;
+        }
     }
 
-    const items = await Promise.all(
-        comments.map(comment => renderComment(comment))
-    );
+    return `
+        <div class="${isReply ? 'reply-item' : 'comment-item'}">
+            ${replyToHTML}
+            <div class="${headerClass}">
+                <div class="${avatarContainerClass}">
+                    <div class="${avatarClass}${avatarUrl ? ' has-image' : ''}">
+                        ${avatarContent}
+                    </div>
+                    ${frameHTML}
+                </div>
+                <div class="${infoClass}">
+                    <div class="author-line">
+                        <span class="${authorClass}">${escapeHTML(authorName)}</span>
+                        ${blockHTML}
+                    </div>
+                    <span class="${timeClass}">${escapeHTML(comment.createdAt || '')}</span>
+                </div>
+            </div>
+            ${badgesHTML}
+            <div class="${isReply ? 'reply-content' : 'comment-content'}">${contentHTML}</div>
+            ${actionsHTML}
+            ${repliesHTML}
+        </div>
+    `;
+}
 
-    return items.join('');
+let commentsObserver = null;
+
+function setupCommentsObserver() {
+    if (commentsObserver) {
+        commentsObserver.disconnect();
+    }
+    const sentinel = getUIElement('commentsListEndSentinel');
+    if (!sentinel) return;
+
+    commentsObserver = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting && currentPage < totalPages && !isLoadingMore) {
+            loadMoreComments();
+        }
+    }, {
+        root: null,
+        rootMargin: '200px',
+        threshold: 0
+    });
+    commentsObserver.observe(sentinel);
 }
 
 async function getReview(
@@ -1374,7 +1248,8 @@ async function getReview(
     chapterId,
     detailUrl,
     coverUrl,
-    userToken
+    userToken,
+    isInitialLoad = false
 ) {
     const version = ++reviewVersion;
 
@@ -1384,24 +1259,26 @@ async function getReview(
         ? `&chapter_id=${encodeURIComponent(chapterId)}`
         : '';
 
-    const apiUrl =
+    const commentsPerPage = 10;
+
+    const apiUrlBase =
         `${baseUrl}/api/comment/list.php` +
         `?type=${commentType}` +
         `&book_id=${encodeURIComponent(bookId)}` +
         chapterParam +
-        '&limit=60';
+        `&limit=${commentsPerPage}`;
 
     try {
-        document.getElementById('bookTitle').textContent =
+        getUIElement('bookTitle').textContent =
             bookName;
 
-        document.getElementById('chapterTitle').textContent =
+        getUIElement('chapterTitle').textContent =
             chapterName || '书评';
 
         const headers = createAuthHeaders(userToken);
 
         const firstData = await requestJSON(
-            `${apiUrl}&page=1`,
+            `${apiUrlBase}&page=1`,
             { headers }
         );
 
@@ -1409,175 +1286,132 @@ async function getReview(
             throw new Error(firstData.message || '加载失败');
         }
 
-        let allComments = Array.isArray(firstData.comments)
-            ? firstData.comments
-            : [];
+        totalPages = Math.max(1, Number(firstData?.pagination?.pages) || 1);
+        currentPage = 1;
 
-        const totalPages = Math.max(
-            1,
-            Number(firstData.pages) || 1
-        );
-
-        for (let page = 2; page <= totalPages; page++) {
-            const data = await requestJSON(
-                `${apiUrl}&page=${page}`,
-                { headers }
-            );
-
-            if (data.success === false) {
-                throw new Error(data.message || '加载失败');
-            }
-
-            allComments = allComments.concat(
-                Array.isArray(data.comments) ? data.comments : []
-            );
+        if (isInitialLoad || displayedComments.length === 0) {
+            displayedComments = Array.isArray(firstData.comments) ? firstData.comments : [];
+        } else {
         }
 
         if (version !== reviewVersion) return;
 
-        cachedComments = allComments;
-        await renderSortedComments();
+        await renderDisplayedComments();
+        setupCommentsObserver();
+
     } catch (error) {
         if (version !== reviewVersion) return;
 
         console.error('加载评论失败:', error);
 
-        document.getElementById('commentsList').innerHTML =
+        getUIElement('commentsList').innerHTML =
             '<div class="error">加载失败，请稍后重试</div>';
+    } finally {
+        isLoadingMore = false;
     }
 }
 
-function getSortedComments() {
-    const list = [...cachedComments];
-
-    if (currentSort === 'reverse') {
-        list.reverse();
-    } else if (currentSort === 'hot') {
-        list.sort((a, b) => {
-            return (
-                (Number(b.helpfulCount) || 0) -
-                (Number(a.helpfulCount) || 0)
-            );
-        });
+async function loadMoreComments() {
+    if (isLoadingMore || currentPage >= totalPages) {
+        return;
     }
+    isLoadingMore = true;
 
-    return list;
+    const commentsList = getUIElement('commentsList');
+    if (!commentsList) return;
+
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'loading-more';
+    loadingDiv.textContent = '正在加载更多评论...';
+    commentsList.appendChild(loadingDiv);
+
+    try {
+        const commentsPerPage = 10;
+        const apiUrlBase =
+            `${globalConfig.baseUrl}/api/comment/list.php` +
+            `?type=${globalConfig.chapterId ? 'chapter' : 'book'}` +
+            `&book_id=${encodeURIComponent(globalConfig.bookId)}` +
+            (globalConfig.chapterId ? `&chapter_id=${encodeURIComponent(globalConfig.chapterId)}` : '') +
+            `&limit=${commentsPerPage}`;
+
+        const headers = createAuthHeaders(globalConfig.userToken);
+        const nextData = await requestJSON(
+            `${apiUrlBase}&page=${currentPage + 1}`,
+            { headers }
+        );
+
+        if (nextData.success === false) {
+            throw new Error(nextData.message || '加载失败');
+        }
+
+        const newComments = Array.isArray(nextData.comments) ? nextData.comments : [];
+        const startIdx = displayedComments.length;
+        displayedComments.push(...newComments);
+
+        currentPage++;
+
+        await renderDisplayedComments(true, startIdx);
+        setupCommentsObserver();
+    } catch (error) {
+        showToast('加载更多评论失败: ' + error.message, 'error');
+        console.error('加载更多评论失败:', error);
+    } finally {
+        commentsList.querySelectorAll('.loading-more').forEach(el => el.remove());
+        isLoadingMore = false;
+    }
 }
 
-async function renderSortedComments() {
+
+async function renderDisplayedComments(appendMode = false, startIdx = 0) {
     const version = ++renderVersion;
-    const container = document.getElementById('commentsList');
+    const container = getUIElement('commentsList');
+    const sentinel = getUIElement('commentsListEndSentinel');
 
-    container.innerHTML =
-        '<div class="loading">排序中...</div>';
+    if (!container) return;
 
-    const html = await getComment(
-        getSortedComments(),
-        globalConfig.baseUrl,
-        globalConfig.userToken
+    if (!appendMode) {
+        container.innerHTML = '<div class="loading">加载中...</div>';
+    }
+
+    const commentsToRender = appendMode ? displayedComments.slice(startIdx) : displayedComments;
+    const htmlPromises = commentsToRender.map(comment =>
+        renderComment(comment, false, 0, null, globalConfig.baseUrl, globalConfig.userToken)
     );
+    const renderedHtmlArray = await Promise.all(htmlPromises);
 
     if (version !== renderVersion) return;
 
-    container.innerHTML = html;
+    if (appendMode) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = renderedHtmlArray.join('');
+        while(tempDiv.firstChild) {
+            container.insertBefore(tempDiv.firstChild, sentinel);
+        }
+    } else {
+        container.innerHTML = renderedHtmlArray.join('');
+    }
+
+    if (!sentinel && currentPage < totalPages) {
+        const newSentinel = document.createElement('div');
+        newSentinel.id = 'commentsListEndSentinel';
+        newSentinel.style.height = '1px';
+        newSentinel.style.pointerEvents = 'none';
+        container.appendChild(newSentinel);
+        ui.commentsListEndSentinel = newSentinel;
+    } else if (sentinel) {
+        container.appendChild(sentinel);
+    }
+
 
     bindInteractiveElements(container);
     bindActionButtons(container);
 }
 
-function initSortBar() {
-    const button = document.getElementById('sortBarBtn');
-    const dropdown = document.getElementById('sortDropdown');
-    const label = document.getElementById('sortBarLabel');
-    const arrow = document.getElementById('sortBarArrow');
-
-    if (!button || !dropdown) return;
-
-    const options = Array.from(
-        dropdown.querySelectorAll('.sort-option')
-    );
-
-    const labels = {
-        default: '默认排序',
-        reverse: '倒序',
-        hot: '热度优先'
-    };
-
-    function syncWidth() {
-        dropdown.style.visibility = 'hidden';
-        dropdown.style.display = 'flex';
-
-        const dropdownWidth = dropdown.offsetWidth;
-
-        dropdown.style.display = '';
-        dropdown.style.visibility = '';
-
-        const width = Math.max(
-            button.offsetWidth,
-            dropdownWidth
-        );
-
-        button.style.width = width + 'px';
-        dropdown.style.width = width + 'px';
-    }
-
-    function closeDropdown() {
-        dropdown.classList.remove('open');
-        button.setAttribute('aria-expanded', 'false');
-        arrow.textContent = '▾';
-    }
-
-    button.addEventListener('click', event => {
-        event.stopPropagation();
-
-        if (dropdown.classList.contains('open')) {
-            closeDropdown();
-        } else {
-            syncWidth();
-            dropdown.classList.add('open');
-            button.setAttribute('aria-expanded', 'true');
-            arrow.textContent = '▴';
-        }
-    });
-
-    document.addEventListener('click', event => {
-        if (
-            !button.contains(event.target) &&
-            !dropdown.contains(event.target)
-        ) {
-            closeDropdown();
-        }
-    });
-
-    options.forEach(option => {
-        option.addEventListener('click', async event => {
-            event.stopPropagation();
-
-            const sort = option.dataset.sort;
-            closeDropdown();
-
-            if (sort === currentSort || !labels[sort]) return;
-
-            currentSort = sort;
-
-            options.forEach(item => {
-                item.classList.toggle('active', item === option);
-            });
-
-            label.textContent = labels[sort];
-
-            try {
-                await renderSortedComments();
-            } catch (error) {
-                showToast('排序失败: ' + error.message, 'error');
-            }
-        });
-    });
-}
-
 function toggleCover(coverUrl) {
-    const coverBox = document.getElementById('coverBox');
-    const coverImage = document.getElementById('coverImage');
+    const coverBox = getUIElement('coverBox');
+    const coverImage = getUIElement('coverImage');
+
+    if (!coverBox || !coverImage) return;
 
     if (coverBox.classList.contains('expanded')) {
         coverBox.classList.remove('expanded');
@@ -1626,15 +1460,19 @@ function toggleCover(coverUrl) {
 }
 
 function initFabMenu() {
-    const main = document.getElementById('fabMain');
-    const options = document.getElementById('fabOptions');
+    const main = getUIElement('fabMain');
+    const options = getUIElement('fabOptions');
+    const fabJump = getUIElement('fabJump');
+    const fabComment = getUIElement('fabComment');
+
+    if (!main || !options || !fabJump || !fabComment) return;
 
     main.addEventListener('click', () => {
         main.classList.toggle('active');
         options.classList.toggle('active');
     });
 
-    document.getElementById('fabJump').addEventListener(
+    fabJump.addEventListener(
         'click',
         () => {
             if (globalConfig.detailUrl) {
@@ -1643,7 +1481,7 @@ function initFabMenu() {
         }
     );
 
-    document.getElementById('fabComment').addEventListener(
+    fabComment.addEventListener(
         'click',
         () => openInputPanel('comment')
     );
@@ -1667,9 +1505,11 @@ function insertAtCursor(textarea, text, offset = 0) {
 }
 
 function initMarkdownShortcuts() {
-    const field = document.getElementById('inputField');
+    const field = getUIElement('inputField');
+    const markdownShortcuts = getUIElement('markdownShortcuts');
+    if (!field || !markdownShortcuts) return;
 
-    document.getElementById('markdownShortcuts')
+    markdownShortcuts
         .addEventListener('click', event => {
             const button = event.target.closest('.shortcut-btn');
             if (!button) return;
@@ -1701,7 +1541,7 @@ function initMarkdownShortcuts() {
                 case 'code-block':
                     text =
                         '\n```\n' +
-                        (selected || '// Your code here') +
+                        (selected || '// 代码块') +
                         '\n```\n';
 
                     offset = selected ? text.length - 4 : 5;
@@ -1773,15 +1613,18 @@ function setInputTab(tab) {
             );
         });
 
-    document.getElementById('markdownShortcuts')
+    getUIElement('markdownShortcuts')
         .classList.toggle('hidden', tab === 'preview');
 }
 
 function openInputPanel(mode, commentId = null, authorName = null) {
-    const overlay = document.getElementById('inputOverlay');
-    const title = document.getElementById('inputTitle');
-    const subtitle = document.getElementById('inputSubtitle');
-    const field = document.getElementById('inputField');
+    const overlay = getUIElement('inputOverlay');
+    const title = getUIElement('inputTitle');
+    const subtitle = getUIElement('inputSubtitle');
+    const field = getUIElement('inputField');
+    const inputPreview = getUIElement('inputPreview');
+
+    if (!overlay || !title || !subtitle || !field || !inputPreview) return;
 
     currentInputMode = mode;
     currentCommentId = commentId;
@@ -1804,15 +1647,17 @@ function openInputPanel(mode, commentId = null, authorName = null) {
 
     setInputTab('edit');
 
-    document.getElementById('inputPreview').innerHTML = '';
+    inputPreview.innerHTML = '';
 
     overlay.classList.add('active');
     field.focus();
 }
 
 function closeInputPanel() {
-    document.getElementById('inputOverlay')
-        .classList.remove('active');
+    const overlay = getUIElement('inputOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
 
     currentInputMode = null;
     currentCommentId = null;
@@ -1822,7 +1667,8 @@ function closeInputPanel() {
 }
 
 async function submitInput() {
-    const field = document.getElementById('inputField');
+    const field = getUIElement('inputField');
+    if (!field) return;
     const content = field.value.trim();
 
     if (!content) {
@@ -1839,7 +1685,8 @@ async function submitInput() {
         return;
     }
 
-    const submitButton = document.getElementById('inputSubmit');
+    const submitButton = getUIElement('inputSubmit');
+    if (!submitButton) return;
 
     if (submitButton.disabled) return;
 
@@ -1904,7 +1751,13 @@ async function submitInput() {
 }
 
 function initInputPanel() {
-    const overlay = document.getElementById('inputOverlay');
+    const overlay = getUIElement('inputOverlay');
+    const inputCancel = getUIElement('inputCancel');
+    const inputSubmit = getUIElement('inputSubmit');
+    const inputPreview = getUIElement('inputPreview');
+    const inputField = getUIElement('inputField');
+
+    if (!overlay || !inputCancel || !inputSubmit || !inputPreview || !inputField) return;
 
     overlay.addEventListener('click', event => {
         if (event.target === overlay) {
@@ -1912,11 +1765,8 @@ function initInputPanel() {
         }
     });
 
-    document.getElementById('inputCancel')
-        .addEventListener('click', closeInputPanel);
-
-    document.getElementById('inputSubmit')
-        .addEventListener('click', submitInput);
+    inputCancel.addEventListener('click', closeInputPanel);
+    inputSubmit.addEventListener('click', submitInput);
 
     document.querySelectorAll('.input-tab-btn')
         .forEach(button => {
@@ -1928,26 +1778,24 @@ function initInputPanel() {
 
                 if (tab !== 'preview') return;
 
-                const preview = document.getElementById('inputPreview');
-
-                preview.innerHTML =
+                inputPreview.innerHTML =
                     '<div class="book-loading">渲染中...</div>';
 
                 try {
                     const html = await renderMarkdown(
-                        document.getElementById('inputField').value,
+                        inputField.value,
                         globalConfig.baseUrl,
                         globalConfig.userToken
                     );
 
                     if (version !== previewVersion) return;
 
-                    preview.innerHTML = html;
-                    bindInteractiveElements(preview);
+                    inputPreview.innerHTML = html;
+                    bindInteractiveElements(inputPreview);
                 } catch (error) {
                     if (version !== previewVersion) return;
 
-                    preview.textContent =
+                    inputPreview.textContent =
                         '预览失败: ' + error.message;
                 }
             });
@@ -2027,7 +1875,7 @@ function findCachedComment(id, isReply) {
         return null;
     }
 
-    return visit(cachedComments, false);
+    return visit(displayedComments, false);
 }
 
 function updateReactionButton(button, type, active, count) {
@@ -2165,8 +2013,10 @@ async function handleReaction(
 }
 
 function bindActionButtons(
-    container = document.getElementById('commentsList')
+    container = getUIElement('commentsList')
 ) {
+    if (!container) return;
+
     container.querySelectorAll('.reply-btn').forEach(button => {
         button.addEventListener('click', () => {
             openInputPanel(
@@ -2226,6 +2076,21 @@ function bindActionButtons(
 }
 
 function bindInteractiveElements(container) {
+    if (!container) return;
+
+    container.querySelectorAll('.fold-container:not(.expanded) .fold-content img').forEach(img => {
+        if (img.dataset.srcLoaded || img.closest('source-badge') || img.closest('.book-card')) {
+            return;
+        }
+
+        const originalSrc = img.src;
+        if (originalSrc) {
+            img.dataset.src = originalSrc;
+            img.removeAttribute('src');
+            img.dataset.srcLoaded = '1';
+        }
+    });
+
     container.querySelectorAll('.spoiler').forEach(spoiler => {
         if (spoiler.dataset.bound) return;
         spoiler.dataset.bound = '1';
@@ -2379,7 +2244,7 @@ function spoilerTouchCancel(event) {
 }
 
 function toggleFold(header) {
-    const content = document.getElementById(
+    const content = getUIElement(
         header.dataset.fold
     );
 
@@ -2389,6 +2254,21 @@ function toggleFold(header) {
 
     content.classList.toggle('expanded', expanded);
     header.setAttribute('aria-expanded', String(expanded));
+
+    if (expanded) {
+        content.querySelectorAll('img[data-src]').forEach(img => {
+            if (img.closest('source-badge') || img.closest('.book-card')) {
+                return;
+            }
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+            img.removeAttribute('data-srcLoaded');
+        });
+        content.querySelectorAll('source-badge').forEach(badge => {
+            badge.scheduleFit?.();
+        });
+        hydrateBookCards(content);
+    }
 }
 
 function toggleFoldClick(event) {
@@ -2416,7 +2296,7 @@ function toggleFoldTouchEnd(event) {
 }
 
 function toggleReplies(button) {
-    const container = document.getElementById(button.dataset.replies);
+    const container = getUIElement(button.dataset.replies);
     if (!container) return;
 
     const expanded = !button.classList.contains('expanded');
@@ -2439,20 +2319,28 @@ function toggleReplies(button) {
         '(prefers-reduced-motion: reduce)'
     ).matches;
 
+    if (expanded) {
+        container.querySelectorAll('img[data-src]').forEach(img => {
+            if (img.closest('source-badge') || img.closest('.book-card')) {
+                return;
+            }
+            img.src = img.dataset.src;
+            img.removeAttribute('data-src');
+            img.removeAttribute('data-srcLoaded');
+        });
+        container.querySelectorAll('source-badge').forEach(badge => {
+            badge.scheduleFit?.();
+        });
+        hydrateBookCards(container);
+    }
+
+
     if (reduceMotion || typeof container.animate !== 'function') {
         container.classList.toggle('expanded', expanded);
-        if (expanded) {
-            container.querySelectorAll('source-badge')
-                .forEach(badge => badge.scheduleFit?.());
-        }
         return;
     }
 
     container.classList.add('expanded');
-    if (expanded) {
-        container.querySelectorAll('source-badge')
-            .forEach(badge => badge.scheduleFit?.());
-    }
 
     const animation = container.animate(
         [
@@ -2563,10 +2451,11 @@ function initImageViewer() {
             return;
         }
 
-        if (
-            target.id === 'coverImage' &&
-            !document.getElementById('coverBox')
-                .classList.contains('expanded')
+        const coverBox = getUIElement('coverBox');
+        const coverImage = getUIElement('coverImage');
+        if (coverBox && coverImage &&
+            target === coverImage &&
+            !coverBox.classList.contains('expanded')
         ) {
             return;
         }
@@ -2637,7 +2526,7 @@ document.addEventListener(
 
 function initComments(config) {
     if (!Array.isArray(config)) {
-        document.getElementById('commentsList').innerHTML =
+        getUIElement('commentsList').innerHTML =
             '<div class="error">配置格式错误</div>';
 
         return;
@@ -2668,20 +2557,42 @@ function initComments(config) {
     if (!uiInitialized) {
         uiInitialized = true;
 
+        ui.toastContainer = document.getElementById('toastContainer');
+        ui.bookTitle = document.getElementById('bookTitle');
+        ui.chapterTitle = document.getElementById('chapterTitle');
+        ui.coverBox = document.getElementById('coverBox');
+        ui.coverImage = document.getElementById('coverImage');
+        ui.commentsList = document.getElementById('commentsList');
+        ui.fabMain = document.getElementById('fabMain');
+        ui.fabOptions = document.getElementById('fabOptions');
+        ui.fabJump = document.getElementById('fabJump');
+        ui.fabComment = document.getElementById('fabComment');
+        ui.inputOverlay = document.getElementById('inputOverlay');
+        ui.inputTitle = document.getElementById('inputTitle');
+        ui.inputSubtitle = document.getElementById('inputSubtitle');
+        ui.inputField = document.getElementById('inputField');
+        ui.inputPreview = document.getElementById('inputPreview');
+        ui.markdownShortcuts = document.getElementById('markdownShortcuts');
+        ui.inputCancel = document.getElementById('inputCancel');
+        ui.inputSubmit = document.getElementById('inputSubmit');
+        ui.headerBox = document.getElementById('headerBox');
+        ui.commentsListEndSentinel = document.getElementById('commentsListEndSentinel');
+
+
         initFabMenu();
         initImageViewer();
         initInputPanel();
-        initSortBar();
 
-        const header = document.getElementById('headerBox');
-
-        header.addEventListener('click', event => {
-            if (event.target.id !== 'coverImage') {
-                toggleCover(globalConfig.coverUrl);
-            }
-        });
-
-        header.style.cursor = 'pointer';
+        const headerBox = getUIElement('headerBox');
+        const coverImage = getUIElement('coverImage');
+        if (headerBox) {
+            headerBox.addEventListener('click', event => {
+                if (event.target !== coverImage) {
+                    toggleCover(globalConfig.coverUrl);
+                }
+            });
+            headerBox.style.cursor = 'pointer';
+        }
     }
 
     if (!window.DOMPurify) {
@@ -2695,7 +2606,7 @@ function initComments(config) {
     if (baseUrl && bookId) {
         refreshReview();
     } else {
-        document.getElementById('commentsList').innerHTML =
+        getUIElement('commentsList').innerHTML =
             '<div class="error">缺少必要参数</div>';
     }
 }
