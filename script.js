@@ -1369,6 +1369,16 @@ async function renderDisplayedComments(appendMode = false, startIdx = 0) {
 
     if (!container) return;
 
+    if (displayedComments.length === 0) {
+        container.innerHTML = `
+            <div class="no-comments">
+                <div class="no-comments-icon">💬</div>
+                <div class="no-comments-text">暂无评论</div>
+            </div>
+        `;
+        return;
+    }
+
     if (!appendMode) {
         container.innerHTML = '<div class="loading">加载中...</div>';
     }
