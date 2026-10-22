@@ -702,7 +702,7 @@ async function blockUser(userId, btnElement) {
     if (btnElement) btnElement.disabled = true;
     try {
         const response = await fetch(
-            `${globalConfig.baseUrl}/api/v2/users/${encodeURIComponent(userId)}/block`,
+            `${globalConfig.baseUrl}/api/users/${encodeURIComponent(userId)}/block`,
             { method: 'POST', headers: createAuthHeaders(globalConfig.userToken) }
         );
         if (!response.ok) throw new Error(`请求失败（HTTP ${response.status}）`);
@@ -778,9 +778,7 @@ async function loadBookCard(
             data = await bookCache.get(cacheKey);
         } else {
             const promise = requestJSON(
-                `${baseUrl}/api/novel/detail.php?id=${
-                    encodeURIComponent(bookId)
-                }`,
+                `${baseUrl}/api/novels/${encodeURIComponent(bookId)}/detail`,
                 {
                     headers: createAuthHeaders(userToken)
                 }
@@ -1262,7 +1260,7 @@ async function getReview(
     const commentsPerPage = 10;
 
     const apiUrlBase =
-        `${baseUrl}/api/comment/list.php` +
+        `${baseUrl}/api/comments` +
         `?type=${commentType}` +
         `&book_id=${encodeURIComponent(bookId)}` +
         chapterParam +
@@ -1328,7 +1326,7 @@ async function loadMoreComments() {
     try {
         const commentsPerPage = 10;
         const apiUrlBase =
-            `${globalConfig.baseUrl}/api/comment/list.php` +
+            `${globalConfig.baseUrl}/api/comments` +
             `?type=${globalConfig.chapterId ? 'chapter' : 'book'}` +
             `&book_id=${encodeURIComponent(globalConfig.bookId)}` +
             (globalConfig.chapterId ? `&chapter_id=${encodeURIComponent(globalConfig.chapterId)}` : '') +
@@ -1714,7 +1712,7 @@ async function submitInput() {
 
         if (currentInputMode === 'comment') {
             url =
-                `${globalConfig.baseUrl}/api/comment/create.php`;
+                `${globalConfig.baseUrl}/api/comments`;
 
             body = {
                 type: globalConfig.chapterId ? 'chapter' : 'book',
@@ -1727,10 +1725,9 @@ async function submitInput() {
             }
         } else {
             url =
-                `${globalConfig.baseUrl}/api/comment/reply.php`;
+                `${globalConfig.baseUrl}/api/comments/${currentCommentId}/replies`;
 
             body = {
-                comment_id: currentCommentId,
                 content,
                 reply_to_name: currentReplyToName
             };
