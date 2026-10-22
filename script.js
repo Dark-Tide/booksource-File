@@ -778,9 +778,7 @@ async function loadBookCard(
             data = await bookCache.get(cacheKey);
         } else {
             const promise = requestJSON(
-                `${baseUrl}/api/novel/detail.php?id=${
-                    encodeURIComponent(bookId)
-                }`,
+                `${baseUrl}/api/novels/${encodeURIComponent(bookId)}/detail`,
                 {
                     headers: createAuthHeaders(userToken)
                 }
@@ -1125,11 +1123,11 @@ async function renderComment(
 
     const statsHTML = `
         <div class="${isReply ? 'reply-stats' : 'comment-stats'}">
-            <span class="stat-item helpful ${helpfulActive ? 'active' : ''}" data-id="${escapeHTML(comment.id)}" data-type="helpful" role="button" tabindex="0">
+            <span class="stat-item helpful ${helpfulActive ? 'active' : ''}" data-id="${escapeHTML(comment.id)}" ${isReply ? `data-parent-comment-id="${escapeHTML(currentRootId)}"` : ''} data-type="helpful" role="button" tabindex="0">
                 ${helpfulActive ? ICONS.helpful.filled : ICONS.helpful.outline}
                 <span class="count">${Number(comment.helpfulCount) || 0}</span>
             </span>
-            <span class="stat-item not-helpful ${notHelpfulActive ? 'active' : ''}" data-id="${escapeHTML(comment.id)}" data-type="not_helpful" role="button" tabindex="0">
+            <span class="stat-item not-helpful ${notHelpfulActive ? 'active' : ''}" data-id="${escapeHTML(comment.id)}" ${isReply ? `data-parent-comment-id="${escapeHTML(currentRootId)}"` : ''} data-type="not_helpful" role="button" tabindex="0">
                 ${notHelpfulActive ? ICONS.not_helpful.filled : ICONS.not_helpful.outline}
                 <span class="count">${Number(comment.notHelpfulCount) || 0}</span>
             </span>
@@ -1145,7 +1143,7 @@ async function renderComment(
     const deleteHTML = isOwnComment
         ? `
             <button class="action-btn delete ${isReply ? 'delete-reply-btn' : 'delete-comment-btn'}"
-                    ${isReply ? `data-reply-id="${escapeHTML(comment.id)}"` : `data-comment-id="${escapeHTML(comment.id)}"`}
+                    ${isReply ? `data-reply-id="${escapeHTML(comment.id)}" data-parent-comment-id="${escapeHTML(currentRootId)}"` : `data-comment-id="${escapeHTML(comment.id)}"`}
                     type="button">🗑️ 删除</button>
         `
         : '';
@@ -1262,7 +1260,7 @@ async function getReview(
     const commentsPerPage = 10;
 
     const apiUrlBase =
-        `${baseUrl}/api/comment/list.php` +
+        `${baseUrl}/api/comments` +
         `?type=${commentType}` +
         `&book_id=${encodeURIComponent(bookId)}` +
         chapterParam +
@@ -1328,7 +1326,7 @@ async function loadMoreComments() {
     try {
         const commentsPerPage = 10;
         const apiUrlBase =
-            `${globalConfig.baseUrl}/api/comment/list.php` +
+            `${globalConfig.baseUrl}/api/comments` +
             `?type=${globalConfig.chapterId ? 'chapter' : 'book'}` +
             `&book_id=${encodeURIComponent(globalConfig.bookId)}` +
             (globalConfig.chapterId ? `&chapter_id=${encodeURIComponent(globalConfig.chapterId)}` : '') +
@@ -1714,7 +1712,7 @@ async function submitInput() {
 
         if (currentInputMode === 'comment') {
             url =
-                `${globalConfig.baseUrl}/api/comment/create.php`;
+                `${globalConfig.baseUrl}/api/comments`;
 
             body = {
                 type: globalConfig.chapterId ? 'chapter' : 'book',
@@ -1727,10 +1725,9 @@ async function submitInput() {
             }
         } else {
             url =
-                `${globalConfig.baseUrl}/api/comment/reply.php`;
+                `${globalConfig.baseUrl}/api/comments/${currentCommentId}/replies`;
 
             body = {
-                comment_id: currentCommentId,
                 content,
                 reply_to_name: currentReplyToName
             };
@@ -1813,7 +1810,7 @@ function initInputPanel() {
     initMarkdownShortcuts();
 }
 
-async function deleteEntry(id, isReply) {
+async function deleteEntry(id, parentCommentId, isReply) {
     const label = isReply ? '回复' : '评论';
 
     if (!confirm(`确定要删除这条${label}吗？`)) {
@@ -1826,24 +1823,14 @@ async function deleteEntry(id, isReply) {
     }
 
     try {
-        const headers = createAuthHeaders(
-            globalConfig.userToken
-        );
+        const url = isReply
+            ? `${globalConfig.baseUrl}/api/comments/${encodeURIComponent(parentCommentId)}/replies/${encodeURIComponent(id)}`
+            : `${globalConfig.baseUrl}/api/comments/${encodeURIComponent(id)}`;
 
-        headers['Content-Type'] = 'application/json';
-
-        const body = isReply
-            ? { reply_id: id }
-            : { comment_id: id };
-
-        const result = await requestJSON(
-            `${globalConfig.baseUrl}/api/comment/delete.php`,
-            {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(body)
-            }
-        );
+        const result = await requestJSON(url, {
+            method: 'DELETE',
+            headers: createAuthHeaders(globalConfig.userToken)
+        });
 
         if (!result.success) {
             throw new Error(result.message || '删除失败');
@@ -1858,11 +1845,11 @@ async function deleteEntry(id, isReply) {
 }
 
 function deleteComment(commentId) {
-    return deleteEntry(commentId, false);
+    return deleteEntry(commentId, null, false);
 }
 
-function deleteReply(replyId) {
-    return deleteEntry(replyId, true);
+function deleteReply(replyId, parentCommentId) {
+    return deleteEntry(replyId, parentCommentId, true);
 }
 
 function findCachedComment(id, isReply) {
@@ -1932,18 +1919,18 @@ async function handleReaction(
             'reply-stats'
         );
 
+        const parentCommentId = targetElement.dataset.parentCommentId;
+
+        const url = isReply
+            ? `${globalConfig.baseUrl}/api/comments/${encodeURIComponent(parentCommentId)}/replies/${encodeURIComponent(commentId)}/reactions`
+            : `${globalConfig.baseUrl}/api/comments/${encodeURIComponent(commentId)}/reactions`;
+
         const body = {
             reaction_type: reactionType
         };
 
-        if (isReply) {
-            body.reply_id = parseInt(commentId, 10);
-        } else {
-            body.comment_id = parseInt(commentId, 10);
-        }
-
         const result = await requestJSON(
-            `${globalConfig.baseUrl}/api/comment/react.php`,
+            url,
             {
                 method: 'POST',
                 headers,
@@ -2055,7 +2042,10 @@ function bindActionButtons(
             button.dataset.bound = '1';
 
             button.addEventListener('click', () => {
-                deleteReply(button.dataset.replyId);
+                deleteReply(
+                    button.dataset.replyId,
+                    button.dataset.parentCommentId
+                );
             });
         });
 
