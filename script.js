@@ -702,7 +702,7 @@ async function blockUser(userId, btnElement) {
     if (btnElement) btnElement.disabled = true;
     try {
         const response = await fetch(
-            `${globalConfig.baseUrl}/api/users/${encodeURIComponent(userId)}/block`,
+            `${globalConfig.baseUrl}/api/v2/users/${encodeURIComponent(userId)}/block`,
             { method: 'POST', headers: createAuthHeaders(globalConfig.userToken) }
         );
         if (!response.ok) throw new Error(`请求失败（HTTP ${response.status}）`);
