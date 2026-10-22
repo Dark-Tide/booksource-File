@@ -1143,7 +1143,7 @@ async function renderComment(
     const deleteHTML = isOwnComment
         ? `
             <button class="action-btn delete ${isReply ? 'delete-reply-btn' : 'delete-comment-btn'}"
-                    ${isReply ? `data-reply-id="${escapeHTML(comment.id)}"` : `data-comment-id="${escapeHTML(comment.id)}"`}
+                    ${isReply ? `data-reply-id="${escapeHTML(comment.id)}" data-parent-comment-id="${escapeHTML(currentRootId)}"` : `data-comment-id="${escapeHTML(comment.id)}"`}
                     type="button">🗑️ 删除</button>
         `
         : '';
@@ -1810,7 +1810,7 @@ function initInputPanel() {
     initMarkdownShortcuts();
 }
 
-async function deleteEntry(id, isReply) {
+async function deleteEntry(id, parentCommentId, isReply) {
     const label = isReply ? '回复' : '评论';
 
     if (!confirm(`确定要删除这条${label}吗？`)) {
@@ -1823,24 +1823,14 @@ async function deleteEntry(id, isReply) {
     }
 
     try {
-        const headers = createAuthHeaders(
-            globalConfig.userToken
-        );
+        const url = isReply
+            ? `${globalConfig.baseUrl}/api/comments/${encodeURIComponent(parentCommentId)}/replies/${encodeURIComponent(id)}`
+            : `${globalConfig.baseUrl}/api/comments/${encodeURIComponent(id)}`;
 
-        headers['Content-Type'] = 'application/json';
-
-        const body = isReply
-            ? { reply_id: id }
-            : { comment_id: id };
-
-        const result = await requestJSON(
-            `${globalConfig.baseUrl}/api/comment/delete.php`,
-            {
-                method: 'POST',
-                headers,
-                body: JSON.stringify(body)
-            }
-        );
+        const result = await requestJSON(url, {
+            method: 'DELETE',
+            headers: createAuthHeaders(globalConfig.userToken)
+        });
 
         if (!result.success) {
             throw new Error(result.message || '删除失败');
@@ -1855,11 +1845,11 @@ async function deleteEntry(id, isReply) {
 }
 
 function deleteComment(commentId) {
-    return deleteEntry(commentId, false);
+    return deleteEntry(commentId, null, false);
 }
 
-function deleteReply(replyId) {
-    return deleteEntry(replyId, true);
+function deleteReply(replyId, parentCommentId) {
+    return deleteEntry(replyId, parentCommentId, true);
 }
 
 function findCachedComment(id, isReply) {
@@ -2052,7 +2042,10 @@ function bindActionButtons(
             button.dataset.bound = '1';
 
             button.addEventListener('click', () => {
-                deleteReply(button.dataset.replyId);
+                deleteReply(
+                    button.dataset.replyId,
+                    button.dataset.parentCommentId
+                );
             });
         });
 
