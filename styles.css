@@ -119,39 +119,44 @@ button {
 .cover-box {
     background: var(--surface);
     overflow: hidden;
-    max-height: 0;
+    display: grid;
+    grid-template-rows: 0fr;
     padding: 0 20px;
     margin: 0;
     border: none;
     box-shadow: none;
     border-radius: 0;
     transition:
-        max-height .4s ease-out,
+        grid-template-rows .4s ease-out,
         margin-bottom .4s ease-out,
         padding .4s ease-out;
 }
 
 .cover-box.expanded {
-    max-height: 500px;
+    max-height: 1000px;
     padding: 10px 20px;
     margin-bottom: 20px;
     border-radius: 0 0 8px 8px;
     border-top: 1px solid var(--border);
     box-shadow: 0 8px 10px rgba(0, 0, 0, .08);
+    display: flex;
+    justify-content: center;
 }
 
 @media (max-width: 400px) {
     .cover-box.expanded {
-        max-height: 400px;
+        max-height: 800px;
     }
 }
 
 .cover-image {
     width: 100%;
+    max-width: 300px;
     height: auto;
     border-radius: 4px;
     display: block;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .1);
+    object-fit: contain;
 }
 
 .comments-list {
