@@ -1217,6 +1217,26 @@ source-badge {
     display: flex;
     align-items: center;
     gap: 4px;
+    color: #94a3b8;
+}
+
+.book-stat-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.book-stat-item.adult-content-warning {
+    color: var(--danger);
+    font-weight: 500;
+}
+
+.book-stat-item.adult-content-warning .book-stat-icon {
+    color: var(--danger);
+}
+
+.reply-item .book-stats {
+    font-size: 11px;
 }
 
 .book-tags-section {
