@@ -1199,11 +1199,45 @@ source-badge {
     overflow: hidden;
 }
 
+.book-title .upload-tag {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    vertical-align: middle;
+}
+
 .book-author {
     font-size: 13px;
     color: var(--text-secondary);
     margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
+
+.book-author .uploader-info {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.book-stat-item.upload-book-info {
+    color: var(--accent);
+}
+
+.book-stat-item.upload-book-info .book-stat-icon {
+    color: var(--accent);
+}
+
+
 
 .book-stats {
     display: flex;
@@ -1349,6 +1383,20 @@ source-badge {
 .reply-item .book-author,
 .reply-item .book-stats {
     font-size: 11px;
+}
+
+.reply-item .book-author {
+    gap: 6px;
+}
+
+.reply-item .book-title .upload-tag {
+    font-size: 9px;
+    padding: 1px 4px;
+    margin-left: 6px;
+}
+
+.reply-item .book-author .uploader-info {
+    font-size: 10px;
 }
 
 .reply-item .book-tags-section,
