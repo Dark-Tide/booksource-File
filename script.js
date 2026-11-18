@@ -875,7 +875,7 @@ function renderBookCard(
                         class="book-title"
                         title="${escapeHTML(title)}"
                     >${escapeHTML(title)}
-                        ${bookData.platform === 'upload' ? `<span class="upload-tag">上传</span>` : ''}
+                        ${bookData.platform === 'upload' ? `<span class="upload-tag">上传书</span>` : ''}
                     </div>
 
                     <div class="book-author">
@@ -904,13 +904,6 @@ function renderBookCard(
                             <div class="book-stat-item adult-content-warning">
                                 <svg class="book-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
                                 <span>成人向作品</span>
-                            </div>
-                        ` : ''}
-
-                        ${bookData.platform === 'upload' ? `
-                            <div class="book-stat-item upload-book-info">
-                                <svg class="book-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17H2V12H22V17ZM22 8H2V4H22V8ZM6 20H18V19H6V20ZM6 11H18V10H6V11Z"></path></svg>
-                                <span>上传书</span>
                             </div>
                         ` : ''}
                     </div>
