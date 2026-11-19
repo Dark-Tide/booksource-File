@@ -73,6 +73,11 @@ body {
     overflow-x: hidden;
 }
 
+body.editor-scroll-locked {
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
 button,
 textarea {
     font-family: inherit;
@@ -119,44 +124,39 @@ button {
 .cover-box {
     background: var(--surface);
     overflow: hidden;
-    display: grid;
-    grid-template-rows: 0fr;
+    max-height: 0;
     padding: 0 20px;
     margin: 0;
     border: none;
     box-shadow: none;
     border-radius: 0;
     transition:
-        grid-template-rows .4s ease-out,
+        max-height .4s ease-out,
         margin-bottom .4s ease-out,
         padding .4s ease-out;
 }
 
 .cover-box.expanded {
-    max-height: 1000px;
+    max-height: 500px;
     padding: 10px 20px;
     margin-bottom: 20px;
     border-radius: 0 0 8px 8px;
     border-top: 1px solid var(--border);
     box-shadow: 0 8px 10px rgba(0, 0, 0, .08);
-    display: flex;
-    justify-content: center;
 }
 
 @media (max-width: 400px) {
     .cover-box.expanded {
-        max-height: 800px;
+        max-height: 400px;
     }
 }
 
 .cover-image {
     width: 100%;
-    max-width: 300px;
     height: auto;
     border-radius: 4px;
     display: block;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .1);
-    object-fit: contain;
 }
 
 .comments-list {
@@ -1528,6 +1528,9 @@ source-badge {
 }
 
 .input-overlay {
+    touch-action: none;
+    overscroll-behavior: none;
+
     --editor-bg: #fff;
     --editor-soft: #f3f5f9;
     --editor-field: #f8fafc;
@@ -1560,6 +1563,8 @@ source-badge {
 
 .input-panel {
     position: relative;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
 
@@ -1768,6 +1773,9 @@ source-badge {
 }
 
 .input-tab-content {
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+
     display: none;
     flex: 1 1 auto;
     min-height: 0;
@@ -1790,6 +1798,9 @@ source-badge {
 }
 
 .input-field {
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+
     display: block;
     flex: 1 1 auto;
     width: 100%;
