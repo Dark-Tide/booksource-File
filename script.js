@@ -1678,6 +1678,7 @@ function closeInputPanel() {
         overlay.classList.remove('active');
     }
 
+
     currentInputMode = null;
     currentCommentId = null;
     currentReplyToName = null;
@@ -1776,6 +1777,12 @@ function initInputPanel() {
     const inputField = getUIElement('inputField');
 
     if (!overlay || !inputCancel || !inputSubmit || !inputPreview || !inputField) return;
+
+    overlay.addEventListener('touchmove', event => {
+        if (!event.target.closest('.input-panel')) {
+            event.preventDefault();
+        }
+    }, { passive: false });
 
     overlay.addEventListener('click', event => {
         if (event.target === overlay) {
