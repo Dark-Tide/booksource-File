@@ -93,57 +93,6 @@ const ICONS = {
 
 const ui = {};
 
-let pageScrollLock = null;
-let overlayTouchStartY = 0;
-
-function lockPageScroll() {
-    if (pageScrollLock) return;
-    const body = document.body;
-    const scrollY = window.scrollY || window.pageYOffset || 0;
-    pageScrollLock = { scrollY, bodyPosition: body.style.position, bodyTop: body.style.top, bodyWidth: body.style.width, bodyOverflow: body.style.overflow };
-    body.classList.add("editor-scroll-locked");
-    body.style.position = "fixed";
-    body.style.top = `-${scrollY}px`;
-    body.style.width = "100%";
-    body.style.overflow = "hidden";
-}
-
-function unlockPageScroll() {
-    if (!pageScrollLock) return;
-    const { scrollY, bodyPosition, bodyTop, bodyWidth, bodyOverflow } = pageScrollLock;
-    const body = document.body;
-    body.classList.remove("editor-scroll-locked");
-    body.style.position = bodyPosition;
-    body.style.top = bodyTop;
-    body.style.width = bodyWidth;
-    body.style.overflow = bodyOverflow;
-    pageScrollLock = null;
-    window.scrollTo(0, scrollY);
-}
-
-function getScrollableEditorTarget(target) {
-    if (!(target instanceof Element)) return null;
-    return target.closest(".input-field, .input-tab-content, .input-preview");
-}
-
-function canScrollElement(element, deltaY) {
-    if (!element) return false;
-    const maxScrollTop = element.scrollHeight - element.clientHeight;
-    if (maxScrollTop <= 0) return false;
-    if (deltaY < 0) return element.scrollTop < maxScrollTop;
-    if (deltaY > 0) return element.scrollTop > 0;
-    return true;
-}
-
-function getEditorTouchMoveTarget(target, deltaY) {
-    let element = getScrollableEditorTarget(target);
-    while (element) {
-        if (canScrollElement(element, deltaY)) return element;
-        element = element.parentElement?.closest(".input-field, .input-tab-content, .input-preview") || null;
-    }
-    return null;
-}
-
 function getUIElement(id) {
     if (!ui[id]) {
         ui[id] = document.getElementById(id);
@@ -1719,7 +1668,6 @@ function openInputPanel(mode, commentId = null, authorName = null) {
 
     inputPreview.innerHTML = '';
 
-    lockPageScroll();
     overlay.classList.add('active');
     field.focus();
 }
@@ -1730,7 +1678,6 @@ function closeInputPanel() {
         overlay.classList.remove('active');
     }
 
-    unlockPageScroll();
 
     currentInputMode = null;
     currentCommentId = null;
@@ -1831,19 +1778,11 @@ function initInputPanel() {
 
     if (!overlay || !inputCancel || !inputSubmit || !inputPreview || !inputField) return;
 
-    overlay.addEventListener('touchstart', event => {
-        overlayTouchStartY = event.touches[0]?.clientY || 0;
-    }, { passive: true, capture: true });
-
     overlay.addEventListener('touchmove', event => {
-        if (!overlay.classList.contains('active')) return;
-        const touch = event.touches[0];
-        const currentY = touch?.clientY || overlayTouchStartY;
-        const deltaY = currentY - overlayTouchStartY;
-        const scrollTarget = getEditorTouchMoveTarget(event.target, deltaY);
-        if (!scrollTarget) event.preventDefault();
-        overlayTouchStartY = currentY;
-    }, { passive: false, capture: true });
+        if (!event.target.closest('.input-panel')) {
+            event.preventDefault();
+        }
+    }, { passive: false });
 
     overlay.addEventListener('click', event => {
         if (event.target === overlay) {
