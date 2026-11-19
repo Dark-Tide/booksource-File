@@ -73,11 +73,6 @@ body {
     overflow-x: hidden;
 }
 
-body.editor-scroll-locked {
-    overflow: hidden;
-    overscroll-behavior: none;
-}
-
 button,
 textarea {
     font-family: inherit;
@@ -1529,7 +1524,7 @@ source-badge {
 
 .input-overlay {
     touch-action: none;
-    overscroll-behavior: none;
+    overscroll-behavior: contain;
 
     --editor-bg: #fff;
     --editor-soft: #f3f5f9;
@@ -1773,9 +1768,6 @@ source-badge {
 }
 
 .input-tab-content {
-    touch-action: pan-y;
-    overscroll-behavior: contain;
-
     display: none;
     flex: 1 1 auto;
     min-height: 0;
@@ -1798,9 +1790,6 @@ source-badge {
 }
 
 .input-field {
-    touch-action: pan-y;
-    overscroll-behavior: contain;
-
     display: block;
     flex: 1 1 auto;
     width: 100%;
