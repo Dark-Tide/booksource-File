@@ -1523,6 +1523,9 @@ source-badge {
 }
 
 .input-overlay {
+    touch-action: none;
+    overscroll-behavior: contain;
+
     --editor-bg: #fff;
     --editor-soft: #f3f5f9;
     --editor-field: #f8fafc;
@@ -1555,6 +1558,8 @@ source-badge {
 
 .input-panel {
     position: relative;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
 
